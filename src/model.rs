@@ -10,6 +10,7 @@ pub struct Model {
 }
 
 impl Model {
+    #[allow(dead_code)]
     pub fn cube() -> Self {
         let verts = vec![
             vec3(-0.5, -0.5, -0.5f32),
@@ -29,6 +30,72 @@ impl Model {
             vec![2, 3, 7, 6], // Top
             vec![0, 4, 5, 1], // Bottom
         ];
+        Self::new(verts, faces)
+    }
+
+    #[allow(dead_code)]
+    pub fn octahedron() -> Self {
+        let r = 2f32.sqrt();
+        let verts = vec![
+            Vec3::unit_x() * -r,
+            Vec3::unit_x() * r,
+            Vec3::unit_y() * -r,
+            Vec3::unit_y() * r,
+            Vec3::unit_z() * -r,
+            Vec3::unit_z() * r,
+        ];
+        let faces = vec![
+            vec![3, 0, 5],
+            vec![3, 5, 1],
+            vec![3, 1, 4],
+            vec![3, 4, 0],
+            vec![2, 5, 0],
+            vec![2, 1, 5],
+            vec![2, 4, 1],
+            vec![2, 0, 4],
+        ];
+        Self::new(verts, faces)
+    }
+
+    #[allow(dead_code)]
+    pub fn cuboctahedron() -> Self {
+        let r = 2f32.sqrt();
+        let verts = vec![
+            // XY plane
+            vec3(-r, -r, 0.0),
+            vec3(-r, r, 0.0),
+            vec3(r, -r, 0.0),
+            vec3(r, r, 0.0),
+            // XZ plane
+            vec3(-r, 0.0, -r),
+            vec3(-r, 0.0, r),
+            vec3(r, 0.0, -r),
+            vec3(r, 0.0, r),
+            // YZ plane
+            vec3(0.0, -r, -r),
+            vec3(0.0, -r, r),
+            vec3(0.0, r, -r),
+            vec3(0.0, r, r),
+        ];
+        let faces = vec![
+            // Squares
+            vec![4, 10, 6, 8],  // Front
+            vec![7, 11, 5, 9],  // Back
+            vec![6, 3, 7, 2],   // Right
+            vec![1, 4, 0, 5],   // Left
+            vec![1, 11, 3, 10], // Top
+            vec![0, 8, 2, 9],   // Bottom
+            // Triangles
+            vec![1, 10, 4],
+            vec![10, 3, 6],
+            vec![3, 11, 7],
+            vec![11, 1, 5],
+            vec![4, 8, 0],
+            vec![8, 6, 2],
+            vec![2, 7, 9],
+            vec![9, 5, 0],
+        ];
+
         Self::new(verts, faces)
     }
 

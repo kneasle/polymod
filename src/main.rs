@@ -4,7 +4,7 @@ use three_d::*;
 mod model;
 
 fn main() {
-    let model = Model::cube();
+    let model = Model::cuboctahedron();
 
     // Create window
     let window = Window::new(WindowSettings {
@@ -20,7 +20,7 @@ fn main() {
     let scene_radius = 6.0f32;
     let mut camera = Camera::new_perspective(
         window.viewport(),
-        target + scene_radius * vec3(0.6, 0.3, 1.0).normalize(),
+        target + scene_radius * vec3(0.0, 0.0, 1.0),
         target,
         vec3(0.0, 1.0, 0.0),
         degrees(45.0),
