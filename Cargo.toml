@@ -1,8 +1,9 @@
 [package]
 name = "polymod"
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+three-d = { version = "0.16.3", features = ["egui-gui"] }
+itertools = "0.12.1"
+index_vec = "0.1.3"
