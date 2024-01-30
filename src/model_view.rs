@@ -82,14 +82,18 @@ impl ModelView {
         let lights = [&ambient as &dyn Light, &directional0, &directional1];
 
         // Meshes
-        let face_mesh = Gm::new(
-            self.mesh_cache.get(model, &self.context),
-            &self.face_material,
-        );
+        let meshes = self.mesh_cache.get(model, &self.context);
+        let face_mesh = Gm::new(&meshes.face_mesh, &self.face_material);
+        let edge_mesh = Gm::new(&meshes.edge_mesh, &self.wireframe_material);
+        let vertex_mesh = Gm::new(&meshes.vertex_mesh, &self.wireframe_material);
 
         target
             .clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0))
-            .render(&self.camera, [face_mesh], &lights);
+            .render(
+                &self.camera,
+                [&face_mesh as &dyn Object, &vertex_mesh, &edge_mesh],
+                &lights,
+            );
     }
 }
 
@@ -102,22 +106,39 @@ mod cache {
     /// GPU.
     pub(super) struct MeshCache {
         model: PolyModel,
-        face_mesh: Mesh,
+        meshes: Meshes,
+    }
+
+    pub(super) struct Meshes {
+        pub face_mesh: Mesh,
+        pub edge_mesh: InstancedMesh,
+        pub vertex_mesh: InstancedMesh,
     }
 
     impl MeshCache {
         pub(super) fn new(model: PolyModel, context: &Context) -> Self {
+            let mut sphere = CpuMesh::sphere(8);
+            sphere.transform(&Mat4::from_scale(0.05)).unwrap();
+            let mut cylinder = CpuMesh::cylinder(10);
+            cylinder
+                .transform(&Mat4::from_nonuniform_scale(1.0, 0.03, 0.03))
+                .unwrap();
+
             Self {
-                face_mesh: Mesh::new(&context, &model.face_mesh()),
+                meshes: Meshes {
+                    face_mesh: Mesh::new(&context, &model.face_mesh()),
+                    edge_mesh: InstancedMesh::new(context, &model.edge_instances(), &cylinder),
+                    vertex_mesh: InstancedMesh::new(context, &model.vertex_instances(), &sphere),
+                },
                 model,
             }
         }
 
-        pub(super) fn get<'s>(&'s mut self, model: &PolyModel, context: &Context) -> &'s Mesh {
+        pub(super) fn get<'s>(&'s mut self, model: &PolyModel, context: &Context) -> &'s Meshes {
             if &self.model != model {
                 *self = Self::new(model.clone(), context);
             }
-            &self.face_mesh
+            &self.meshes
         }
     }
 }

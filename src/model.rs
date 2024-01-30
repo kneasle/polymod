@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use three_d::{vec3, CpuMesh, Indices, Positions, Vec3};
+use three_d::{vec3, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, Vec3};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
@@ -10,6 +10,10 @@ pub struct PolyModel {
 }
 
 impl PolyModel {
+    ////////////
+    // SHAPES //
+    ////////////
+
     #[allow(dead_code)]
     pub fn cube() -> Self {
         let verts = vec![
@@ -109,6 +113,18 @@ impl PolyModel {
         }
     }
 
+    pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
+        let mut edges = Vec::new();
+        for f in &self.faces {
+            for (&v1, &v2) in f.iter().circular_tuple_windows() {
+                if v1 < v2 {
+                    edges.push((v1, v2));
+                }
+            }
+        }
+        edges
+    }
+
     ///////////////
     // RENDERING //
     ///////////////
@@ -140,9 +156,42 @@ impl PolyModel {
         mesh.compute_normals();
         mesh
     }
+
+    pub fn edge_instances(&self) -> Instances {
+        Instances {
+            transformations: self
+                .edges()
+                .into_iter()
+                .map(|(v1, v2)| edge_transform(self.verts[v1], self.verts[v2]))
+                .collect_vec(),
+            ..Default::default()
+        }
+    }
+
+    pub fn vertex_instances(&self) -> Instances {
+        Instances {
+            transformations: self
+                .verts
+                .iter()
+                .cloned()
+                .map(Mat4::from_translation)
+                .collect_vec(),
+            ..Default::default()
+        }
+    }
 }
 
 index_vec::define_index_type! { pub struct VertIdx = usize; }
 index_vec::define_index_type! { pub struct FaceIdx = usize; }
 pub type VertVec<T> = index_vec::IndexVec<VertIdx, T>;
 pub type FaceVec<T> = index_vec::IndexVec<FaceIdx, T>;
+
+fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
+    Mat4::from_translation(p1)
+        * Mat4::from(Quat::from_arc(
+            vec3(1.0, 0.0, 0.0),
+            (p2 - p1).normalize(),
+            None,
+        ))
+        * Mat4::from_nonuniform_scale((p1 - p2).magnitude(), 1.0, 1.0)
+}
