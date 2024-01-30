@@ -2,7 +2,7 @@ use itertools::Itertools;
 use three_d::{vec3, CpuMesh, Indices, Positions, Vec3};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PolyModel {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
