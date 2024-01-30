@@ -1,10 +1,12 @@
-use model::Model;
+use std::time::Instant;
+
+use model::PolyModel;
 use three_d::*;
 
 mod model;
 
 fn main() {
-    let model = Model::cuboctahedron();
+    let model = PolyModel::cuboctahedron();
 
     // Create window
     let window = Window::new(WindowSettings {
@@ -78,6 +80,7 @@ fn main() {
 
         FrameOutput {
             swap_buffers: redraw,
+            wait_next_event: true,
             ..Default::default()
         }
     });

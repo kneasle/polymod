@@ -3,13 +3,13 @@ use three_d::{vec3, CpuMesh, Indices, Positions, Vec3};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone)]
-pub struct Model {
+pub struct PolyModel {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Vec<VertIdx>>,
 }
 
-impl Model {
+impl PolyModel {
     #[allow(dead_code)]
     pub fn cube() -> Self {
         let verts = vec![
