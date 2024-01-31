@@ -28,6 +28,14 @@ fn main() {
             name: "Cuboctahedron".to_owned(),
             poly: PolyModel::cuboctahedron(),
         },
+        model::Model {
+            name: "3-Prism".to_owned(),
+            poly: PolyModel::prism(3),
+        },
+        model::Model {
+            name: "5-Prism".to_owned(),
+            poly: PolyModel::prism(5),
+        },
     ];
 
     // Create model view

@@ -20,7 +20,6 @@ impl PolyModel {
     // SHAPES //
     ////////////
 
-    #[allow(dead_code)]
     pub fn cube() -> Self {
         let verts = vec![
             vec3(-0.5, -0.5, -0.5f32),
@@ -43,7 +42,31 @@ impl PolyModel {
         Self::new(verts, faces)
     }
 
-    #[allow(dead_code)]
+    pub fn prism(n: usize) -> Self {
+        let angle = std::f32::consts::PI * 2.0 / n as f32;
+        let radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
+        // Vertices
+        let mut verts = Vec::new();
+        for i in 0..n {
+            let a = angle * i as f32;
+            let x = a.sin() * radius;
+            let z = a.cos() * radius;
+            verts.push(vec3(x, -0.5, z));
+            verts.push(vec3(x, 0.5, z));
+        }
+        // Faces
+        let mut faces = vec![
+            (0..n).map(|i| i * 2 + 1).collect_vec(),   // Top face
+            (0..n).rev().map(|i| i * 2).collect_vec(), // Bottom face
+        ];
+        for i1 in 0..n {
+            let i2 = (i1 + 1) % n;
+            faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces
+        }
+        // Construct
+        Self::new(verts, faces)
+    }
+
     pub fn octahedron() -> Self {
         let r = 2f32.sqrt() / 2.0;
         let verts = vec![
@@ -67,7 +90,6 @@ impl PolyModel {
         Self::new(verts, faces)
     }
 
-    #[allow(dead_code)]
     pub fn cuboctahedron() -> Self {
         let r = 2f32.sqrt() / 2.0;
         let verts = vec![
@@ -123,11 +145,12 @@ impl PolyModel {
         let mut edges = Vec::new();
         for f in &self.faces {
             for (&v1, &v2) in f.iter().circular_tuple_windows() {
-                if v1 < v2 {
-                    edges.push((v1, v2));
-                }
+                edges.push((v1.min(v2), v1.max(v2)));
             }
         }
+        // Dedup and return edges
+        edges.sort();
+        edges.dedup();
         edges
     }
 
