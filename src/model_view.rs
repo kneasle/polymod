@@ -63,16 +63,16 @@ impl ModelView {
         }
     }
 
-    pub fn update(&mut self, frame_input: &mut FrameInput) -> bool {
+    pub fn update(&mut self, frame_input: &mut FrameInput, viewport: Viewport) -> bool {
         let mut redraw = frame_input.first_frame;
-        redraw |= self.camera.set_viewport(frame_input.viewport);
+        redraw |= self.camera.set_viewport(viewport);
         redraw |= self
             .control
             .handle_events(&mut self.camera, &mut frame_input.events);
         redraw
     }
 
-    pub fn render(&mut self, model: &PolyModel, target: RenderTarget) {
+    pub fn render(&mut self, model: &PolyModel, target: &RenderTarget) {
         // Lights
         let ambient = AmbientLight::new(&self.context, 0.7, Srgba::WHITE);
         let directional0 =
@@ -87,13 +87,11 @@ impl ModelView {
         let edge_mesh = Gm::new(&meshes.edge_mesh, &self.wireframe_material);
         let vertex_mesh = Gm::new(&meshes.vertex_mesh, &self.wireframe_material);
 
-        target
-            .clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0))
-            .render(
-                &self.camera,
-                [&face_mesh as &dyn Object, &vertex_mesh, &edge_mesh],
-                &lights,
-            );
+        target.render(
+            &self.camera,
+            [&face_mesh as &dyn Object, &vertex_mesh, &edge_mesh],
+            &lights,
+        );
     }
 }
 
