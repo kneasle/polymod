@@ -45,7 +45,7 @@ impl PolyModel {
 
     #[allow(dead_code)]
     pub fn octahedron() -> Self {
-        let r = 2f32.sqrt();
+        let r = 2f32.sqrt() / 2.0;
         let verts = vec![
             Vec3::unit_x() * -r,
             Vec3::unit_x() * r,
@@ -69,7 +69,7 @@ impl PolyModel {
 
     #[allow(dead_code)]
     pub fn cuboctahedron() -> Self {
-        let r = 2f32.sqrt();
+        let r = 2f32.sqrt() / 2.0;
         let verts = vec![
             // XY plane
             vec3(-r, -r, 0.0),
