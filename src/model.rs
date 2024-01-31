@@ -43,14 +43,11 @@ impl PolyModel {
     }
 
     pub fn prism(n: usize) -> Self {
-        let angle = std::f32::consts::PI * 2.0 / n as f32;
-        let radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
+        let geom = PolygonGeom::new(n);
         // Vertices
         let mut verts = Vec::new();
         for i in 0..n {
-            let a = angle * i as f32;
-            let x = a.sin() * radius;
-            let z = a.cos() * radius;
+            let (x, z) = geom.point(i);
             verts.push(vec3(x, -0.5, z));
             verts.push(vec3(x, 0.5, z));
         }
@@ -62,6 +59,45 @@ impl PolyModel {
         for i1 in 0..n {
             let i2 = (i1 + 1) % n;
             faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces
+        }
+        // Construct
+        Self::new(verts, faces)
+    }
+
+    pub fn cupola(n: usize) -> Self {
+        assert!(3 <= n && n <= 6);
+        let top = PolygonGeom::new(n);
+        let bottom = PolygonGeom::new(n * 2);
+        let rad_diff = bottom.in_radius - top.in_radius;
+        let height = f32::sqrt(1.0 - rad_diff * rad_diff);
+        // Verts
+        let mut verts = Vec::new();
+        for i in 0..n {
+            let (x, z) = top.offset_point(i, 0.5);
+            verts.push(vec3(x, height / 2.0, z));
+        }
+        for i in 0..n * 2 {
+            let (x, z) = bottom.offset_point(i, 0.5);
+            verts.push(vec3(x, -height / 2.0, z));
+        }
+        let top_vert = |i: usize| i % n;
+        let bottom_vert = |i: usize| n + i % (n * 2);
+        // Faces
+        let mut faces = Vec::new();
+        faces.push((0..n).collect_vec());
+        faces.push((0..n * 2).rev().map(bottom_vert).collect_vec());
+        for i in 0..n {
+            faces.push(vec![
+                top_vert(i + 1),
+                top_vert(i),
+                bottom_vert(i * 2 + 1),
+                bottom_vert(i * 2 + 2),
+            ]);
+            faces.push(vec![
+                top_vert(i),
+                bottom_vert(i * 2),
+                bottom_vert(i * 2 + 1),
+            ]);
         }
         // Construct
         Self::new(verts, faces)
@@ -207,6 +243,36 @@ impl PolyModel {
                 .collect_vec(),
             ..Default::default()
         }
+    }
+}
+
+struct PolygonGeom {
+    angle: f32,
+    in_radius: f32,
+    out_radius: f32,
+}
+
+impl PolygonGeom {
+    fn new(n: usize) -> Self {
+        let angle = std::f32::consts::PI * 2.0 / n as f32;
+        let in_radius = 1.0 / (2.0 * f32::tan(angle / 2.0));
+        let out_radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
+        Self {
+            angle,
+            in_radius,
+            out_radius,
+        }
+    }
+
+    fn point(&self, i: usize) -> (f32, f32) {
+        self.offset_point(i, 0.0)
+    }
+
+    fn offset_point(&self, i: usize, offset: f32) -> (f32, f32) {
+        let a = self.angle * (i as f32 + offset);
+        let x = a.sin() * self.out_radius;
+        let y = a.cos() * self.out_radius;
+        (x, y)
     }
 }
 

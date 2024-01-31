@@ -36,6 +36,22 @@ fn main() {
             name: "5-Prism".to_owned(),
             poly: PolyModel::prism(5),
         },
+        model::Model {
+            name: "6-Prism".to_owned(),
+            poly: PolyModel::prism(6),
+        },
+        model::Model {
+            name: "3-Cupola".to_owned(),
+            poly: PolyModel::cupola(3),
+        },
+        model::Model {
+            name: "4-Cupola".to_owned(),
+            poly: PolyModel::cupola(4),
+        },
+        model::Model {
+            name: "5-Cupola".to_owned(),
+            poly: PolyModel::cupola(5),
+        },
     ];
 
     // Create model view
