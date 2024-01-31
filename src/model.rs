@@ -1,6 +1,12 @@
 use itertools::Itertools;
 use three_d::{vec3, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, Vec3};
 
+#[derive(Debug)]
+pub struct Model {
+    pub name: String,
+    pub poly: PolyModel,
+}
+
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PolyModel {
