@@ -142,11 +142,11 @@ impl PolyModel {
         let mut verts = Vec::new();
         for i in 0..n {
             let (x, z) = top.offset_point(i, 0.5);
-            verts.push(vec3(x, height / 2.0, z));
+            verts.push(vec3(x, height, z));
         }
         for i in 0..n * 2 {
             let (x, z) = bottom.offset_point(i, 0.5);
-            verts.push(vec3(x, -height / 2.0, z));
+            verts.push(vec3(x, 0.0, z));
         }
         let top_vert = |i: usize| i % n;
         let bottom_vert = |i: usize| n + i % (n * 2);
