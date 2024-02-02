@@ -133,7 +133,7 @@ impl PolyModel {
     }
 
     pub fn cupola(n: usize) -> Self {
-        assert!(3 <= n && n <= 6);
+        assert!((3..=5).contains(&n));
         let top = PolygonGeom::new(n);
         let bottom = PolygonGeom::new(n * 2);
         let rad_diff = bottom.in_radius - top.in_radius;
@@ -172,7 +172,7 @@ impl PolyModel {
     }
 
     pub fn pyramid(n: usize) -> Self {
-        assert!(3 <= n && n <= 5);
+        assert!((3..=5).contains(&n));
         let geom = PolygonGeom::new(n);
         let height = f32::sqrt(1.0 - geom.out_radius * geom.out_radius);
         // Verts

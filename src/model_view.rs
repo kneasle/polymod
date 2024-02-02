@@ -31,7 +31,7 @@ impl ModelView {
 
         // Materials
         let mut face_material = PhysicalMaterial::new_opaque(
-            &context,
+            context,
             &CpuMaterial {
                 albedo: Srgba::new_opaque(200, 200, 200),
                 roughness: 0.7,
@@ -41,7 +41,7 @@ impl ModelView {
         );
         face_material.render_states.cull = Cull::Back;
         let mut wireframe_material = PhysicalMaterial::new_opaque(
-            &context,
+            context,
             &CpuMaterial {
                 albedo: Srgba::new_opaque(200, 50, 50),
                 roughness: 0.7,
@@ -124,7 +124,7 @@ mod cache {
 
             Self {
                 meshes: Meshes {
-                    face_mesh: Mesh::new(&context, &model.face_mesh()),
+                    face_mesh: Mesh::new(context, &model.face_mesh()),
                     edge_mesh: InstancedMesh::new(context, &model.edge_instances(), &cylinder),
                     vertex_mesh: InstancedMesh::new(context, &model.vertex_instances(), &sphere),
                 },
