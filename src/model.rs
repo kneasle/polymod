@@ -20,6 +20,10 @@ impl PolyModel {
     // SHAPES //
     ////////////
 
+    pub fn tetrahedron() -> Self {
+        Self::pyramid(3)
+    }
+
     pub fn cube() -> Self {
         let verts = vec![
             vec3(-0.5, -0.5, -0.5f32),
@@ -39,67 +43,6 @@ impl PolyModel {
             vec![2, 3, 7, 6], // Top
             vec![0, 4, 5, 1], // Bottom
         ];
-        Self::new(verts, faces)
-    }
-
-    pub fn prism(n: usize) -> Self {
-        let geom = PolygonGeom::new(n);
-        // Vertices
-        let mut verts = Vec::new();
-        for i in 0..n {
-            let (x, z) = geom.point(i);
-            verts.push(vec3(x, -0.5, z));
-            verts.push(vec3(x, 0.5, z));
-        }
-        // Faces
-        let mut faces = vec![
-            (0..n).map(|i| i * 2 + 1).collect_vec(),   // Top face
-            (0..n).rev().map(|i| i * 2).collect_vec(), // Bottom face
-        ];
-        for i1 in 0..n {
-            let i2 = (i1 + 1) % n;
-            faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces
-        }
-        // Construct
-        Self::new(verts, faces)
-    }
-
-    pub fn cupola(n: usize) -> Self {
-        assert!(3 <= n && n <= 6);
-        let top = PolygonGeom::new(n);
-        let bottom = PolygonGeom::new(n * 2);
-        let rad_diff = bottom.in_radius - top.in_radius;
-        let height = f32::sqrt(1.0 - rad_diff * rad_diff);
-        // Verts
-        let mut verts = Vec::new();
-        for i in 0..n {
-            let (x, z) = top.offset_point(i, 0.5);
-            verts.push(vec3(x, height / 2.0, z));
-        }
-        for i in 0..n * 2 {
-            let (x, z) = bottom.offset_point(i, 0.5);
-            verts.push(vec3(x, -height / 2.0, z));
-        }
-        let top_vert = |i: usize| i % n;
-        let bottom_vert = |i: usize| n + i % (n * 2);
-        // Faces
-        let mut faces = Vec::new();
-        faces.push((0..n).collect_vec());
-        faces.push((0..n * 2).rev().map(bottom_vert).collect_vec());
-        for i in 0..n {
-            faces.push(vec![
-                top_vert(i + 1),
-                top_vert(i),
-                bottom_vert(i * 2 + 1),
-                bottom_vert(i * 2 + 2),
-            ]);
-            faces.push(vec![
-                top_vert(i),
-                bottom_vert(i * 2),
-                bottom_vert(i * 2 + 1),
-            ]);
-        }
-        // Construct
         Self::new(verts, faces)
     }
 
@@ -164,6 +107,87 @@ impl PolyModel {
             vec![9, 5, 0],
         ];
 
+        Self::new(verts, faces)
+    }
+
+    pub fn prism(n: usize) -> Self {
+        let geom = PolygonGeom::new(n);
+        // Vertices
+        let mut verts = Vec::new();
+        for i in 0..n {
+            let (x, z) = geom.point(i);
+            verts.push(vec3(x, -0.5, z));
+            verts.push(vec3(x, 0.5, z));
+        }
+        // Faces
+        let mut faces = vec![
+            (0..n).map(|i| i * 2 + 1).collect_vec(),   // Top face
+            (0..n).rev().map(|i| i * 2).collect_vec(), // Bottom face
+        ];
+        for i1 in 0..n {
+            let i2 = (i1 + 1) % n;
+            faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces
+        }
+        // Construct
+        Self::new(verts, faces)
+    }
+
+    pub fn cupola(n: usize) -> Self {
+        assert!(3 <= n && n <= 6);
+        let top = PolygonGeom::new(n);
+        let bottom = PolygonGeom::new(n * 2);
+        let rad_diff = bottom.in_radius - top.in_radius;
+        let height = f32::sqrt(1.0 - rad_diff * rad_diff);
+        // Verts
+        let mut verts = Vec::new();
+        for i in 0..n {
+            let (x, z) = top.offset_point(i, 0.5);
+            verts.push(vec3(x, height / 2.0, z));
+        }
+        for i in 0..n * 2 {
+            let (x, z) = bottom.offset_point(i, 0.5);
+            verts.push(vec3(x, -height / 2.0, z));
+        }
+        let top_vert = |i: usize| i % n;
+        let bottom_vert = |i: usize| n + i % (n * 2);
+        // Faces
+        let mut faces = Vec::new();
+        faces.push((0..n).collect_vec());
+        faces.push((0..n * 2).rev().map(bottom_vert).collect_vec());
+        for i in 0..n {
+            faces.push(vec![
+                top_vert(i + 1),
+                top_vert(i),
+                bottom_vert(i * 2 + 1),
+                bottom_vert(i * 2 + 2),
+            ]);
+            faces.push(vec![
+                top_vert(i),
+                bottom_vert(i * 2),
+                bottom_vert(i * 2 + 1),
+            ]);
+        }
+        // Construct
+        Self::new(verts, faces)
+    }
+
+    pub fn pyramid(n: usize) -> Self {
+        assert!(3 <= n && n <= 5);
+        let geom = PolygonGeom::new(n);
+        let height = f32::sqrt(1.0 - geom.out_radius * geom.out_radius);
+        // Verts
+        let mut verts = vec![vec3(0.0, height, 0.0)];
+        for i in 0..n {
+            let (x, z) = geom.point(i);
+            verts.push(vec3(x, 0.0, z));
+        }
+        // Faces
+        let mut faces = Vec::new();
+        faces.push((1..=n).rev().collect_vec()); // Bottom face
+        for i in 0..n {
+            faces.push(vec![0, i + 1, (i + 1) % n + 1]); // Triangle faces
+        }
+        // Construct
         Self::new(verts, faces)
     }
 

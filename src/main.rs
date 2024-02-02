@@ -17,6 +17,10 @@ fn main() {
     // Base models
     let models = [
         model::Model {
+            name: "Tetrahedron".to_owned(),
+            poly: PolyModel::tetrahedron(),
+        },
+        model::Model {
             name: "Cube".to_owned(),
             poly: PolyModel::cube(),
         },
@@ -27,6 +31,14 @@ fn main() {
         model::Model {
             name: "Cuboctahedron".to_owned(),
             poly: PolyModel::cuboctahedron(),
+        },
+        model::Model {
+            name: "4-Pyramid".to_owned(),
+            poly: PolyModel::pyramid(4),
+        },
+        model::Model {
+            name: "5-Pyramid".to_owned(),
+            poly: PolyModel::pyramid(5),
         },
         model::Model {
             name: "3-Prism".to_owned(),
