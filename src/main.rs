@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use model::PolyModel;
 use three_d::*;
 
@@ -16,55 +17,26 @@ fn main() {
 
     // Base models
     let models = [
-        model::Model {
-            name: "Tetrahedron".to_owned(),
-            poly: PolyModel::tetrahedron(),
-        },
-        model::Model {
-            name: "Cube".to_owned(),
-            poly: PolyModel::cube(),
-        },
-        model::Model {
-            name: "Octahedron".to_owned(),
-            poly: PolyModel::octahedron(),
-        },
-        model::Model {
-            name: "Cuboctahedron".to_owned(),
-            poly: PolyModel::cuboctahedron(),
-        },
-        model::Model {
-            name: "4-Pyramid".to_owned(),
-            poly: PolyModel::pyramid(4),
-        },
-        model::Model {
-            name: "5-Pyramid".to_owned(),
-            poly: PolyModel::pyramid(5),
-        },
-        model::Model {
-            name: "3-Prism".to_owned(),
-            poly: PolyModel::prism(3),
-        },
-        model::Model {
-            name: "5-Prism".to_owned(),
-            poly: PolyModel::prism(5),
-        },
-        model::Model {
-            name: "6-Prism".to_owned(),
-            poly: PolyModel::prism(6),
-        },
-        model::Model {
-            name: "3-Cupola".to_owned(),
-            poly: PolyModel::cupola(3),
-        },
-        model::Model {
-            name: "4-Cupola".to_owned(),
-            poly: PolyModel::cupola(4),
-        },
-        model::Model {
-            name: "5-Cupola".to_owned(),
-            poly: PolyModel::cupola(5),
-        },
+        ("Tetrahedron", PolyModel::tetrahedron()),
+        ("Cube", PolyModel::cube()),
+        ("Octahedron", PolyModel::octahedron()),
+        ("Cuboctahedron", PolyModel::cuboctahedron()),
+        ("4-Pyramid", PolyModel::pyramid(4)),
+        ("5-Pyramid", PolyModel::pyramid(5)),
+        ("3-Prism", PolyModel::prism(3)),
+        ("5-Prism", PolyModel::prism(5)),
+        ("6-Prism", PolyModel::prism(6)),
+        ("3-Cupola", PolyModel::cupola(3)),
+        ("4-Cupola", PolyModel::cupola(4)),
+        ("5-Cupola", PolyModel::cupola(5)),
     ];
+    let models = models
+        .into_iter()
+        .map(|(name, poly)| crate::model::Model {
+            name: name.to_owned(),
+            poly,
+        })
+        .collect_vec();
 
     // Create model view
     let mut current_model = 0;
