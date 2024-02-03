@@ -26,7 +26,30 @@ impl Model {
 pub struct Polyhedron {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
-    faces: FaceVec<Vec<VertIdx>>,
+    faces: FaceVec<Face>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Face {
+    /// Marks that a face has been removed, in order to preserve face indices when faces are
+    /// removed
+    Gravestone,
+    Face {
+        verts: Vec<VertIdx>,
+    },
+}
+
+impl Face {
+    fn new(verts: Vec<VertIdx>) -> Face {
+        Face::Face { verts }
+    }
+
+    fn verts(&self) -> Option<&[VertIdx]> {
+        match self {
+            Face::Gravestone => None,
+            Face::Face { verts } => Some(verts),
+        }
+    }
 }
 
 ////////////
@@ -185,7 +208,9 @@ impl Polyhedron {
             verts: index_vec::IndexVec::from_vec(verts),
             faces: faces
                 .into_iter()
-                .map(|verts| verts.into_iter().map(VertIdx::new).collect_vec())
+                .map(|verts| Face::Face {
+                    verts: verts.into_iter().map(VertIdx::new).collect_vec(),
+                })
                 .collect(),
         };
         m.make_centred();
@@ -235,17 +260,17 @@ impl Polyhedron {
     }
 
     pub fn extend_pyramid(&mut self, face: FaceIdx) {
-        let n = self.faces[face].len();
+        let n = self.face_order(face);
         self.extend(face, &Polyhedron::pyramid(n), FaceIdx::new(0), 0);
     }
 
     pub fn extend_prism(&mut self, face: FaceIdx) {
-        let n = self.faces[face].len();
+        let n = self.face_order(face);
         self.extend(face, &Polyhedron::prism(n), FaceIdx::new(0), 0);
     }
 
     pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) {
-        let n = self.faces[face].len();
+        let n = self.face_order(face);
         assert!(n % 2 == 0);
         self.extend(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
     }
@@ -257,12 +282,12 @@ impl Polyhedron {
     }
 
     pub fn excavate_prism(&mut self, face: FaceIdx) {
-        let n = self.faces[face].len();
+        let n = self.face_order(face);
         self.excavate(face, &Polyhedron::prism(n), FaceIdx::new(0), 0);
     }
 
     pub fn excavate_cupola(&mut self, face: FaceIdx, gyro: bool) {
-        let n = self.faces[face].len();
+        let n = self.face_order(face);
         assert!(n % 2 == 0);
         self.excavate(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
     }
@@ -275,7 +300,7 @@ impl Polyhedron {
         rotation: usize,
         is_extrude: bool,
     ) {
-        assert_eq!(self.faces[face].len(), other.faces[its_face].len());
+        assert_eq!(self.face_order(face), other.face_order(its_face));
         // Find the matrix transformation required to place `other` in the right location to
         // join `its_face` to `face` at the correct `rotation`
         let self_face_transform = self.face_transform(face, 0, Side::Out);
@@ -285,14 +310,14 @@ impl Polyhedron {
             if is_extrude { Side::In } else { Side::Out },
         );
         let transform = self_face_transform * other_face_transform.invert().unwrap();
-        // Merge vertices into `self`
+        // Merge vertices into `self`, tracking which vertices they turn into
         let new_vert_indices: VertVec<VertIdx> = other
             .verts
             .iter()
             .map(|&v| self.add_vert(transform_point(v, transform)))
             .collect();
         // Add all the new faces (turning them inside out because we're excavating)
-        for face_verts in &other.faces {
+        for face_verts in other.faces() {
             let mut new_verts = face_verts
                 .iter()
                 .map(|v_idx| new_vert_indices[*v_idx])
@@ -300,7 +325,7 @@ impl Polyhedron {
             if !is_extrude {
                 new_verts.reverse();
             }
-            self.faces.push(new_verts);
+            self.faces.push(Face::new(new_verts));
         }
         // Cancel any new faces (which will include cancelling the two faces used to join these
         // polyhedra)
@@ -309,18 +334,19 @@ impl Polyhedron {
 
     /// Remove any pairs of identical but opposite faces
     fn cancel_faces(&mut self) {
-        let normalized_faces: HashSet<Vec<VertIdx>> = self
-            .faces
-            .iter()
-            .map(|verts| normalize_face(verts))
-            .collect();
-        self.faces.retain(|verts| {
-            let mut verts = verts.clone();
-            verts.reverse();
-            let norm_verts = normalize_face(&verts);
-            let is_duplicate = normalized_faces.contains(&norm_verts);
-            !is_duplicate // Keep faces which aren't duplicates
-        });
+        let normalized_faces: HashSet<Vec<VertIdx>> =
+            self.faces().map(|verts| normalize_face(verts)).collect();
+        for f in &mut self.faces {
+            if let Face::Face { verts } = &*f {
+                let mut verts = verts.clone();
+                verts.reverse();
+                let norm_verts = normalize_face(&verts);
+                let is_duplicate = normalized_faces.contains(&norm_verts);
+                if is_duplicate {
+                    *f = Face::Gravestone; // Delete the face by replacing it with a gravestone
+                }
+            }
+        }
     }
 
     pub fn translate(&mut self, d: Vec3) {
@@ -354,7 +380,7 @@ impl Polyhedron {
         let mut verts = Vec::new();
         let mut tri_indices = Vec::new();
 
-        for face_verts in &self.faces {
+        for face_verts in self.faces() {
             // Add all vertices from this face.  We have to duplicate the vertices so that each
             // face gets flat shading
             let first_vert_idx = verts.len() as u32;
@@ -441,7 +467,7 @@ impl Polyhedron {
 
     pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
         let mut edges = Vec::new();
-        for f in &self.faces {
+        for f in self.faces() {
             for (&v1, &v2) in f.iter().circular_tuple_windows() {
                 edges.push((v1.min(v2), v1.max(v2)));
             }
@@ -457,13 +483,25 @@ impl Polyhedron {
     pub fn ngons(&self, n: usize) -> impl DoubleEndedIterator<Item = FaceIdx> + '_ {
         self.faces
             .iter()
-            .positions(move |vs| vs.len() == n)
+            .positions(move |f| f.verts().map(|v| v.len()) == Some(n))
             .map(FaceIdx::new)
     }
 
     /// Gets the highest-indexed face in `self` which has `n` sides.
     pub fn get_ngon(&self, n: usize) -> FaceIdx {
         self.ngons(n).next_back().unwrap()
+    }
+
+    pub fn faces(&self) -> impl DoubleEndedIterator<Item = &[VertIdx]> + '_ {
+        self.faces.iter().filter_map(Face::verts)
+    }
+
+    pub fn face_order(&self, face: FaceIdx) -> usize {
+        self.face_verts(face).len()
+    }
+
+    pub fn face_verts(&self, face: FaceIdx) -> &[VertIdx] {
+        self.faces[face].verts().unwrap()
     }
 
     /// Returns a matrix which translates and rotates such that:
@@ -473,8 +511,9 @@ impl Polyhedron {
     /// - The z-axis now points directly out of the face along its normal.
     /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
     pub fn face_transform(&self, face: FaceIdx, rotation: usize, side: Side) -> Mat4 {
-        let translation = Mat4::from_translation(self.face_vert(face, rotation));
-        let rotation = self.face_rotation(face, rotation, side);
+        let verts = self.face_verts(face);
+        let translation = Mat4::from_translation(self.get_vert_pos(verts, rotation));
+        let rotation = self.face_rotation(verts, rotation, side);
         translation * rotation
     }
 
@@ -485,15 +524,15 @@ impl Polyhedron {
     /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
     ///
     /// The `rotation` will be wrapped to fit within the vertices of the face
-    pub fn face_rotation(&self, face: FaceIdx, rotation: usize, side: Side) -> Mat4 {
+    pub fn face_rotation(&self, verts: &[VertIdx], rotation: usize, side: Side) -> Mat4 {
         let vert_offset = match side {
-            Side::In => self.faces[face].len() - 1,
+            Side::In => verts.len() - 1,
             Side::Out => 1,
         };
-        let v0 = self.face_vert(face, rotation);
-        let v1 = self.face_vert(face, rotation + vert_offset);
+        let v0 = self.get_vert_pos(verts, rotation);
+        let v1 = self.get_vert_pos(verts, rotation + vert_offset);
         let new_y = (v1 - v0).normalize();
-        let mut new_z = self.face_normal(face);
+        let mut new_z = self.normal_from_verts(verts);
         if side == Side::In {
             new_z = -new_z;
         }
@@ -508,17 +547,20 @@ impl Polyhedron {
     }
 
     pub fn face_normal(&self, face: FaceIdx) -> Vec3 {
-        assert!(self.faces[face].len() >= 3);
-        let v0 = self.face_vert(face, 0);
-        let v1 = self.face_vert(face, 1);
-        let v2 = self.face_vert(face, 2);
+        self.normal_from_verts(self.face_verts(face))
+    }
+
+    pub fn normal_from_verts(&self, verts: &[VertIdx]) -> Vec3 {
+        assert!(verts.len() >= 3);
+        let v0 = self.get_vert_pos(verts, 0);
+        let v1 = self.get_vert_pos(verts, 1);
+        let v2 = self.get_vert_pos(verts, 2);
         let d1 = v1 - v0;
         let d2 = v2 - v0;
         d1.cross(d2).normalize()
     }
 
-    pub fn face_vert(&self, face: FaceIdx, vert: usize) -> Vec3 {
-        let face = &self.faces[face];
+    fn get_vert_pos(&self, face: &[VertIdx], vert: usize) -> Vec3 {
         let vert_idx = face[vert % face.len()];
         self.verts[vert_idx]
     }
