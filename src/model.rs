@@ -25,25 +25,7 @@ impl PolyModel {
     }
 
     pub fn cube() -> Self {
-        let verts = vec![
-            vec3(-0.5, -0.5, -0.5f32),
-            vec3(-0.5, -0.5, 0.5),
-            vec3(-0.5, 0.5, -0.5),
-            vec3(-0.5, 0.5, 0.5),
-            vec3(0.5, -0.5, -0.5f32),
-            vec3(0.5, -0.5, 0.5),
-            vec3(0.5, 0.5, -0.5),
-            vec3(0.5, 0.5, 0.5),
-        ];
-        let faces = vec![
-            vec![0, 2, 6, 4], // Front
-            vec![1, 5, 7, 3], // Back
-            vec![0, 1, 3, 2], // Left
-            vec![4, 6, 7, 5], // Right
-            vec![2, 3, 7, 6], // Top
-            vec![0, 4, 5, 1], // Bottom
-        ];
-        Self::new(verts, faces)
+        Self::prism(4)
     }
 
     pub fn octahedron() -> Self {
@@ -116,7 +98,7 @@ impl PolyModel {
         // Vertices
         let mut verts = Vec::new();
         for i in 0..n {
-            let (x, z) = geom.point(i);
+            let (x, z) = geom.offset_point(i, 0.5);
             verts.push(vec3(x, -0.5, z));
             verts.push(vec3(x, 0.5, z));
         }
