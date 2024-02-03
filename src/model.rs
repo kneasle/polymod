@@ -43,74 +43,25 @@ impl PolyModel {
     }
 
     pub fn octahedron() -> Self {
-        let r = 2f32.sqrt() / 2.0;
-        let verts = vec![
-            Vec3::unit_x() * -r,
-            Vec3::unit_x() * r,
-            Vec3::unit_y() * -r,
-            Vec3::unit_y() * r,
-            Vec3::unit_z() * -r,
-            Vec3::unit_z() * r,
-        ];
-        let faces = vec![
-            vec![3, 0, 5],
-            vec![3, 5, 1],
-            vec![3, 1, 4],
-            vec![3, 4, 0],
-            vec![2, 5, 0],
-            vec![2, 1, 5],
-            vec![2, 4, 1],
-            vec![2, 0, 4],
-        ];
-        Self::new(verts, faces)
-    }
-
-    pub fn icosahedron() -> Self {
-        let mut base = Self::antiprism(5);
-        base.extend_pyramid(FaceIdx::new(1));
+        let mut base = Self::pyramid(4);
         base.extend_pyramid(FaceIdx::new(0));
+        base.make_centred();
         base
     }
 
-    pub fn cuboctahedron() -> Self {
-        let r = 2f32.sqrt() / 2.0;
-        let verts = vec![
-            // XY plane
-            vec3(-r, -r, 0.0),
-            vec3(-r, r, 0.0),
-            vec3(r, -r, 0.0),
-            vec3(r, r, 0.0),
-            // XZ plane
-            vec3(-r, 0.0, -r),
-            vec3(-r, 0.0, r),
-            vec3(r, 0.0, -r),
-            vec3(r, 0.0, r),
-            // YZ plane
-            vec3(0.0, -r, -r),
-            vec3(0.0, -r, r),
-            vec3(0.0, r, -r),
-            vec3(0.0, r, r),
-        ];
-        let faces = vec![
-            // Squares
-            vec![4, 10, 6, 8],  // Front
-            vec![7, 11, 5, 9],  // Back
-            vec![6, 3, 7, 2],   // Right
-            vec![1, 4, 0, 5],   // Left
-            vec![1, 11, 3, 10], // Top
-            vec![0, 8, 2, 9],   // Bottom
-            // Triangles
-            vec![1, 10, 4],
-            vec![10, 3, 6],
-            vec![3, 11, 7],
-            vec![11, 1, 5],
-            vec![4, 8, 0],
-            vec![8, 6, 2],
-            vec![2, 7, 9],
-            vec![9, 5, 0],
-        ];
+    pub fn icosahedron() -> Self {
+        let mut shape = Self::antiprism(5);
+        shape.extend_pyramid(FaceIdx::new(1));
+        shape.extend_pyramid(FaceIdx::new(0));
+        // Shape is already centred
+        shape
+    }
 
-        Self::new(verts, faces)
+    pub fn cuboctahedron() -> Self {
+        let mut shape = Self::cupola(3);
+        shape.extend_cupola(FaceIdx::new(1), false);
+        shape.make_centred();
+        shape
     }
 
     pub fn prism(n: usize) -> Self {
@@ -273,6 +224,12 @@ impl PolyModel {
     pub fn extend_pyramid(&mut self, face: FaceIdx) {
         let n = self.faces[face].len();
         self.extend(face, &PolyModel::pyramid(n), FaceIdx::new(0), 0);
+    }
+
+    pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) {
+        let n = self.faces[face].len();
+        assert!(n % 2 == 0);
+        self.extend(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
     }
 
     /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
