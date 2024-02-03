@@ -64,6 +64,13 @@ impl Polyhedron {
         shape
     }
 
+    pub fn rhombicuboctahedron() -> Self {
+        let mut shape = Self::prism(8);
+        shape.extend_cupola(shape.get_ngon(8), true);
+        shape.extend_cupola(shape.get_ngon(8), true);
+        shape
+    }
+
     pub fn prism(n: usize) -> Self {
         assert!(n >= 3);
         let geom = PolygonGeom::new(n);
@@ -221,9 +228,20 @@ impl PolygonGeom {
 ///////////////
 
 impl Polyhedron {
+    /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
+    /// The `other` polyhedron is attached by `its_face`.
+    pub fn extend(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
+        self.merge(face, other, its_face, rotation, true);
+    }
+
     pub fn extend_pyramid(&mut self, face: FaceIdx) {
         let n = self.faces[face].len();
         self.extend(face, &Polyhedron::pyramid(n), FaceIdx::new(0), 0);
+    }
+
+    pub fn extend_prism(&mut self, face: FaceIdx) {
+        let n = self.faces[face].len();
+        self.extend(face, &Polyhedron::prism(n), FaceIdx::new(0), 0);
     }
 
     pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) {
@@ -232,16 +250,21 @@ impl Polyhedron {
         self.extend(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
     }
 
-    /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
-    /// The `other` polyhedron is attached by `its_face`.
-    pub fn extend(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
-        self.merge(face, other, its_face, rotation, true);
-    }
-
     /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
     /// The `other` polyhedron is attached by `its_face`.
     pub fn excavate(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
         self.merge(face, other, its_face, rotation, false);
+    }
+
+    pub fn excavate_prism(&mut self, face: FaceIdx) {
+        let n = self.faces[face].len();
+        self.excavate(face, &Polyhedron::prism(n), FaceIdx::new(0), 0);
+    }
+
+    pub fn excavate_cupola(&mut self, face: FaceIdx, gyro: bool) {
+        let n = self.faces[face].len();
+        assert!(n % 2 == 0);
+        self.excavate(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
     }
 
     fn merge(

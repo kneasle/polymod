@@ -1,4 +1,4 @@
-use model::Polyhedron;
+use model::{FaceIdx, Polyhedron};
 use three_d::*;
 
 mod model;
@@ -50,11 +50,21 @@ fn main() {
             ],
         ),
         (
-            "Archimedian",
-            vec![model::Model::new(
-                "Cuboctahedron",
-                Polyhedron::cuboctahedron(),
-            )],
+            "Archimedean",
+            vec![
+                model::Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
+                model::Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
+            ],
+        ),
+        (
+            "Toroids",
+            vec![model::Model::new("Cake pan", {
+                let mut shape = Polyhedron::cupola(3);
+                shape.excavate_prism(FaceIdx::new(0));
+                shape.extend_prism(shape.get_ngon(6));
+                shape.excavate_cupola(shape.get_ngon(6), true);
+                shape
+            })],
         ),
     ];
 
