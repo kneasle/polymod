@@ -7,6 +7,15 @@ pub struct Model {
     pub poly: PolyModel,
 }
 
+impl Model {
+    pub fn new(name: &str, poly: PolyModel) -> Self {
+        Self {
+            name: name.to_owned(),
+            poly,
+        }
+    }
+}
+
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PolyModel {

@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use model::PolyModel;
 use three_d::*;
 
@@ -16,40 +15,51 @@ fn main() {
     let context = window.gl();
 
     // Base models
-    let models = [
-        ("Tetrahedron", PolyModel::tetrahedron()),
-        ("Cube", PolyModel::cube()),
-        ("Octahedron", PolyModel::octahedron()),
-        ("Cuboctahedron", PolyModel::cuboctahedron()),
-        ("4-Pyramid", PolyModel::pyramid(4)),
-        ("5-Pyramid", PolyModel::pyramid(5)),
-        ("3-Prism", PolyModel::prism(3)),
-        ("4-Prism = Cube", PolyModel::prism(4)),
-        ("5-Prism", PolyModel::prism(5)),
-        ("6-Prism", PolyModel::prism(6)),
-        ("3-Antiprism = Octahedron", PolyModel::antiprism(3)),
-        ("4-Antiprism", PolyModel::antiprism(4)),
-        ("5-Antiprism", PolyModel::antiprism(5)),
-        ("6-Antiprism", PolyModel::antiprism(6)),
-        ("3-Cupola", PolyModel::cupola(3)),
-        ("4-Cupola", PolyModel::cupola(4)),
-        ("5-Cupola", PolyModel::cupola(5)),
+    let model_groups = [
+        (
+            "Platonic",
+            vec![
+                model::Model::new("Tetrahedron", PolyModel::tetrahedron()),
+                model::Model::new("Cube", PolyModel::cube()),
+                model::Model::new("Octahedron", PolyModel::octahedron()),
+            ],
+        ),
+        (
+            "Basic",
+            vec![
+                model::Model::new("3-Pyramid = Tetrahedron", PolyModel::pyramid(3)),
+                model::Model::new("4-Pyramid", PolyModel::pyramid(4)),
+                model::Model::new("5-Pyramid", PolyModel::pyramid(5)),
+                model::Model::new("3-Cupola", PolyModel::cupola(3)),
+                model::Model::new("4-Cupola", PolyModel::cupola(4)),
+                model::Model::new("5-Cupola", PolyModel::cupola(5)),
+            ],
+        ),
+        (
+            "Prisms & Antiprisms",
+            vec![
+                model::Model::new("3-Prism", PolyModel::prism(3)),
+                model::Model::new("4-Prism = Cube", PolyModel::prism(4)),
+                model::Model::new("5-Prism", PolyModel::prism(5)),
+                model::Model::new("6-Prism", PolyModel::prism(6)),
+                model::Model::new("3-Antiprism = Octahedron", PolyModel::antiprism(3)),
+                model::Model::new("4-Antiprism", PolyModel::antiprism(4)),
+                model::Model::new("5-Antiprism", PolyModel::antiprism(5)),
+                model::Model::new("6-Antiprism", PolyModel::antiprism(6)),
+            ],
+        ),
+        (
+            "Archimedian",
+            vec![model::Model::new(
+                "Cuboctahedron",
+                PolyModel::cuboctahedron(),
+            )],
+        ),
     ];
-    let models = models
-        .into_iter()
-        .map(|(name, poly)| crate::model::Model {
-            name: name.to_owned(),
-            poly,
-        })
-        .collect_vec();
 
     // Create model view
-    let mut current_model = 0;
-    let mut view = model_view::ModelView::new(
-        models[current_model].poly.clone(),
-        &context,
-        window.viewport(),
-    );
+    let mut current_model = PolyModel::tetrahedron();
+    let mut view = model_view::ModelView::new(current_model.clone(), &context, window.viewport());
 
     // Main loop
     let mut gui = three_d::GUI::new(&context);
@@ -64,10 +74,12 @@ fn main() {
             |egui_context| {
                 use three_d::egui::*;
                 let response = SidePanel::left("left-panel").show(egui_context, |ui| {
-                    ui.heading("PolyMod");
-                    for (idx, model) in models.iter().enumerate() {
-                        if ui.button(&model.name).clicked() {
-                            current_model = idx;
+                    for (group_name, models) in &model_groups {
+                        ui.heading(*group_name);
+                        for model in models {
+                            if ui.button(&model.name).clicked() {
+                                current_model = model.poly.clone();
+                            }
                         }
                     }
                 });
@@ -89,7 +101,7 @@ fn main() {
         if redraw {
             let screen = frame_input.screen();
             screen.clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0));
-            view.render(&models[current_model].poly, &screen);
+            view.render(&current_model, &screen);
             screen.write(|| gui.render());
         }
 
