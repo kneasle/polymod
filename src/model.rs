@@ -111,6 +111,7 @@ impl PolyModel {
     }
 
     pub fn prism(n: usize) -> Self {
+        assert!(n >= 3);
         let geom = PolygonGeom::new(n);
         // Vertices
         let mut verts = Vec::new();
@@ -127,6 +128,33 @@ impl PolyModel {
         for i1 in 0..n {
             let i2 = (i1 + 1) % n;
             faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces
+        }
+        // Construct
+        Self::new(verts, faces)
+    }
+
+    pub fn antiprism(n: usize) -> Self {
+        assert!(n >= 3);
+        let geom = PolygonGeom::new(n);
+        let half_height =
+            f32::sqrt((f32::cos(geom.angle / 2.0) - f32::cos(geom.angle)) / 2.0) * geom.out_radius;
+        // Vertices
+        let mut verts = Vec::new();
+        for i in 0..n {
+            let (x, z) = geom.point(i);
+            verts.push(vec3(x, -half_height, z));
+            let (x, z) = geom.offset_point(i, 0.5);
+            verts.push(vec3(x, half_height, z));
+        }
+        let bottom_vert = |i: usize| (i % n) * 2;
+        let top_vert = |i: usize| (i % n) * 2 + 1;
+        // Faces
+        let mut faces = Vec::new();
+        faces.push((0..n).rev().map(bottom_vert).collect_vec());
+        faces.push((0..n).map(top_vert).collect_vec());
+        for i in 0..n {
+            faces.push(vec![top_vert(i), bottom_vert(i), bottom_vert(i + 1)]);
+            faces.push(vec![top_vert(i), bottom_vert(i + 1), top_vert(i + 1)]);
         }
         // Construct
         Self::new(verts, faces)
