@@ -74,14 +74,17 @@ fn main() {
             |egui_context| {
                 use three_d::egui::*;
                 let response = SidePanel::left("left-panel").show(egui_context, |ui| {
-                    for (group_name, models) in &model_groups {
-                        ui.heading(*group_name);
-                        for model in models {
-                            if ui.button(&model.name).clicked() {
-                                current_model = model.poly.clone();
+                    ScrollArea::vertical().show(ui, |ui| {
+                        for (group_name, models) in &model_groups {
+                            ui.heading(*group_name);
+                            for model in models {
+                                if ui.button(&model.name).clicked() {
+                                    current_model = model.poly.clone();
+                                }
                             }
+                            ui.add_space(20.0);
                         }
-                    }
+                    });
                 });
                 panel_width = response.response.rect.width();
             },
