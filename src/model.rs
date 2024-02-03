@@ -24,11 +24,11 @@ pub struct PolyModel {
     faces: FaceVec<Vec<VertIdx>>,
 }
 
-impl PolyModel {
-    ////////////
-    // SHAPES //
-    ////////////
+////////////
+// SHAPES //
+////////////
 
+impl PolyModel {
     pub fn tetrahedron() -> Self {
         Self::pyramid(3)
     }
@@ -219,7 +219,43 @@ impl PolyModel {
                 .collect(),
         }
     }
+}
 
+struct PolygonGeom {
+    angle: f32,
+    in_radius: f32,
+    out_radius: f32,
+}
+
+impl PolygonGeom {
+    fn new(n: usize) -> Self {
+        let angle = std::f32::consts::PI * 2.0 / n as f32;
+        let in_radius = 1.0 / (2.0 * f32::tan(angle / 2.0));
+        let out_radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
+        Self {
+            angle,
+            in_radius,
+            out_radius,
+        }
+    }
+
+    fn point(&self, i: usize) -> (f32, f32) {
+        self.offset_point(i, 0.0)
+    }
+
+    fn offset_point(&self, i: usize, offset: f32) -> (f32, f32) {
+        let a = self.angle * (i as f32 + offset);
+        let x = a.sin() * self.out_radius;
+        let y = a.cos() * self.out_radius;
+        (x, y)
+    }
+}
+
+///////////////
+// RENDERING //
+///////////////
+
+impl PolyModel {
     pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
         let mut edges = Vec::new();
         for f in &self.faces {
@@ -232,10 +268,6 @@ impl PolyModel {
         edges.dedup();
         edges
     }
-
-    ///////////////
-    // RENDERING //
-    ///////////////
 
     pub fn face_mesh(&self) -> CpuMesh {
         let mut verts = Vec::new();
@@ -289,41 +321,6 @@ impl PolyModel {
     }
 }
 
-struct PolygonGeom {
-    angle: f32,
-    in_radius: f32,
-    out_radius: f32,
-}
-
-impl PolygonGeom {
-    fn new(n: usize) -> Self {
-        let angle = std::f32::consts::PI * 2.0 / n as f32;
-        let in_radius = 1.0 / (2.0 * f32::tan(angle / 2.0));
-        let out_radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
-        Self {
-            angle,
-            in_radius,
-            out_radius,
-        }
-    }
-
-    fn point(&self, i: usize) -> (f32, f32) {
-        self.offset_point(i, 0.0)
-    }
-
-    fn offset_point(&self, i: usize, offset: f32) -> (f32, f32) {
-        let a = self.angle * (i as f32 + offset);
-        let x = a.sin() * self.out_radius;
-        let y = a.cos() * self.out_radius;
-        (x, y)
-    }
-}
-
-index_vec::define_index_type! { pub struct VertIdx = usize; }
-index_vec::define_index_type! { pub struct FaceIdx = usize; }
-pub type VertVec<T> = index_vec::IndexVec<VertIdx, T>;
-pub type FaceVec<T> = index_vec::IndexVec<FaceIdx, T>;
-
 fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
     Mat4::from_translation(p1)
         * Mat4::from(Quat::from_arc(
@@ -333,3 +330,12 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
         ))
         * Mat4::from_nonuniform_scale((p1 - p2).magnitude(), 1.0, 1.0)
 }
+
+///////////
+// UTILS //
+///////////
+
+index_vec::define_index_type! { pub struct VertIdx = usize; }
+index_vec::define_index_type! { pub struct FaceIdx = usize; }
+pub type VertVec<T> = index_vec::IndexVec<VertIdx, T>;
+pub type FaceVec<T> = index_vec::IndexVec<FaceIdx, T>;
