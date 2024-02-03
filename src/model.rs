@@ -44,22 +44,22 @@ impl PolyModel {
 
     pub fn octahedron() -> Self {
         let mut base = Self::pyramid(4);
-        base.extend_pyramid(FaceIdx::new(0));
+        base.extend_pyramid(base.get_ngon(4));
         base.make_centred();
         base
     }
 
     pub fn icosahedron() -> Self {
         let mut shape = Self::antiprism(5);
-        shape.extend_pyramid(FaceIdx::new(1));
-        shape.extend_pyramid(FaceIdx::new(0));
+        shape.extend_pyramid(shape.get_ngon(5));
+        shape.extend_pyramid(shape.get_ngon(5));
         // Shape is already centred
         shape
     }
 
     pub fn cuboctahedron() -> Self {
         let mut shape = Self::cupola(3);
-        shape.extend_cupola(FaceIdx::new(1), false);
+        shape.extend_cupola(shape.get_ngon(6), false);
         shape.make_centred();
         shape
     }
@@ -427,6 +427,20 @@ impl PolyModel {
         edges.sort();
         edges.dedup();
         edges
+    }
+
+    /// Gets an [`Iterator`] over the [indices](FaceIdx) of every face in `self` which has `n`
+    /// sides
+    pub fn ngons(&self, n: usize) -> impl DoubleEndedIterator<Item = FaceIdx> + '_ {
+        self.faces
+            .iter()
+            .positions(move |vs| vs.len() == n)
+            .map(FaceIdx::new)
+    }
+
+    /// Gets the highest-indexed face in `self` which has `n` sides.
+    pub fn get_ngon(&self, n: usize) -> FaceIdx {
+        self.ngons(n).next_back().unwrap()
     }
 
     /// Returns a matrix which translates and rotates such that:
