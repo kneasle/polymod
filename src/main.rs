@@ -1,4 +1,4 @@
-use model::PolyModel;
+use model::Polyhedron;
 use three_d::*;
 
 mod model;
@@ -19,47 +19,47 @@ fn main() {
         (
             "Platonic",
             vec![
-                model::Model::new("Tetrahedron", PolyModel::tetrahedron()),
-                model::Model::new("Cube", PolyModel::cube()),
-                model::Model::new("Octahedron", PolyModel::octahedron()),
-                model::Model::new("Icosahedron", PolyModel::icosahedron()),
+                model::Model::new("Tetrahedron", Polyhedron::tetrahedron()),
+                model::Model::new("Cube", Polyhedron::cube()),
+                model::Model::new("Octahedron", Polyhedron::octahedron()),
+                model::Model::new("Icosahedron", Polyhedron::icosahedron()),
             ],
         ),
         (
             "Basic",
             vec![
-                model::Model::new("3-Pyramid = Tetrahedron", PolyModel::pyramid(3)),
-                model::Model::new("4-Pyramid", PolyModel::pyramid(4)),
-                model::Model::new("5-Pyramid", PolyModel::pyramid(5)),
-                model::Model::new("3-Cupola", PolyModel::cupola(3)),
-                model::Model::new("4-Cupola", PolyModel::cupola(4)),
-                model::Model::new("5-Cupola", PolyModel::cupola(5)),
+                model::Model::new("3-Pyramid = Tetrahedron", Polyhedron::pyramid(3)),
+                model::Model::new("4-Pyramid", Polyhedron::pyramid(4)),
+                model::Model::new("5-Pyramid", Polyhedron::pyramid(5)),
+                model::Model::new("3-Cupola", Polyhedron::cupola(3)),
+                model::Model::new("4-Cupola", Polyhedron::cupola(4)),
+                model::Model::new("5-Cupola", Polyhedron::cupola(5)),
             ],
         ),
         (
             "Prisms & Antiprisms",
             vec![
-                model::Model::new("3-Prism", PolyModel::prism(3)),
-                model::Model::new("4-Prism = Cube", PolyModel::prism(4)),
-                model::Model::new("5-Prism", PolyModel::prism(5)),
-                model::Model::new("6-Prism", PolyModel::prism(6)),
-                model::Model::new("3-Antiprism = Octahedron", PolyModel::antiprism(3)),
-                model::Model::new("4-Antiprism", PolyModel::antiprism(4)),
-                model::Model::new("5-Antiprism", PolyModel::antiprism(5)),
-                model::Model::new("6-Antiprism", PolyModel::antiprism(6)),
+                model::Model::new("3-Prism", Polyhedron::prism(3)),
+                model::Model::new("4-Prism = Cube", Polyhedron::prism(4)),
+                model::Model::new("5-Prism", Polyhedron::prism(5)),
+                model::Model::new("6-Prism", Polyhedron::prism(6)),
+                model::Model::new("3-Antiprism = Octahedron", Polyhedron::antiprism(3)),
+                model::Model::new("4-Antiprism", Polyhedron::antiprism(4)),
+                model::Model::new("5-Antiprism", Polyhedron::antiprism(5)),
+                model::Model::new("6-Antiprism", Polyhedron::antiprism(6)),
             ],
         ),
         (
             "Archimedian",
             vec![model::Model::new(
                 "Cuboctahedron",
-                PolyModel::cuboctahedron(),
+                Polyhedron::cuboctahedron(),
             )],
         ),
     ];
 
     // Create model view
-    let mut current_model = PolyModel::icosahedron();
+    let mut current_model = Polyhedron::icosahedron();
     let mut view = model_view::ModelView::new(current_model.clone(), &context, window.viewport());
 
     // Main loop

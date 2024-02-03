@@ -9,11 +9,11 @@ use three_d::{
 #[derive(Debug)]
 pub struct Model {
     pub name: String,
-    pub poly: PolyModel,
+    pub poly: Polyhedron,
 }
 
 impl Model {
-    pub fn new(name: &str, poly: PolyModel) -> Self {
+    pub fn new(name: &str, poly: Polyhedron) -> Self {
         Self {
             name: name.to_owned(),
             poly,
@@ -23,7 +23,7 @@ impl Model {
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PolyModel {
+pub struct Polyhedron {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Vec<VertIdx>>,
@@ -33,7 +33,7 @@ pub struct PolyModel {
 // SHAPES //
 ////////////
 
-impl PolyModel {
+impl Polyhedron {
     pub fn tetrahedron() -> Self {
         Self::pyramid(3)
     }
@@ -220,10 +220,10 @@ impl PolygonGeom {
 // MODELLING //
 ///////////////
 
-impl PolyModel {
+impl Polyhedron {
     pub fn extend_pyramid(&mut self, face: FaceIdx) {
         let n = self.faces[face].len();
-        self.extend(face, &PolyModel::pyramid(n), FaceIdx::new(0), 0);
+        self.extend(face, &Polyhedron::pyramid(n), FaceIdx::new(0), 0);
     }
 
     pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) {
@@ -326,7 +326,7 @@ fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
 // RENDERING //
 ///////////////
 
-impl PolyModel {
+impl Polyhedron {
     pub fn face_mesh(&self) -> CpuMesh {
         let mut verts = Vec::new();
         let mut tri_indices = Vec::new();
@@ -402,7 +402,7 @@ pub enum Side {
     Out,
 }
 
-impl PolyModel {
+impl Polyhedron {
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
     /// at `p`, then its index is returned.
     pub fn add_vert(&mut self, p: Vec3) -> VertIdx {

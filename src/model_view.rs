@@ -1,6 +1,6 @@
 use three_d::*;
 
-use crate::model::PolyModel;
+use crate::model::Polyhedron;
 
 pub(crate) struct ModelView {
     context: Context,
@@ -14,7 +14,7 @@ pub(crate) struct ModelView {
 }
 
 impl ModelView {
-    pub fn new(model: PolyModel, context: &Context, viewport: Viewport) -> Self {
+    pub fn new(model: Polyhedron, context: &Context, viewport: Viewport) -> Self {
         // Camera
         let target = vec3(0.0f32, 0.0, 0.0);
         let scene_radius = 6.0f32;
@@ -72,7 +72,7 @@ impl ModelView {
         redraw
     }
 
-    pub fn render(&mut self, model: &PolyModel, target: &RenderTarget) {
+    pub fn render(&mut self, model: &Polyhedron, target: &RenderTarget) {
         // Lights
         let ambient = AmbientLight::new(&self.context, 0.7, Srgba::WHITE);
         let directional0 =
@@ -96,14 +96,14 @@ impl ModelView {
 }
 
 mod cache {
-    use crate::model::PolyModel;
+    use crate::model::Polyhedron;
     use three_d::*;
 
     /// Caches the [`Mesh`]es for the model rendered in the last frame.  This means if the same
     /// model is rendered in consecutive frames then we can avoid resending the mesh data to the
     /// GPU.
     pub(super) struct MeshCache {
-        model: PolyModel,
+        model: Polyhedron,
         meshes: Meshes,
     }
 
@@ -114,7 +114,7 @@ mod cache {
     }
 
     impl MeshCache {
-        pub(super) fn new(model: PolyModel, context: &Context) -> Self {
+        pub(super) fn new(model: Polyhedron, context: &Context) -> Self {
             let mut sphere = CpuMesh::sphere(8);
             sphere.transform(&Mat4::from_scale(0.05)).unwrap();
             let mut cylinder = CpuMesh::cylinder(10);
@@ -132,7 +132,7 @@ mod cache {
             }
         }
 
-        pub(super) fn get<'s>(&'s mut self, model: &PolyModel, context: &Context) -> &'s Meshes {
+        pub(super) fn get<'s>(&'s mut self, model: &Polyhedron, context: &Context) -> &'s Meshes {
             if &self.model != model {
                 *self = Self::new(model.clone(), context);
             }
