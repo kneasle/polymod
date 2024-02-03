@@ -66,10 +66,9 @@ impl PolyModel {
     }
 
     pub fn icosahedron() -> Self {
-        let pyramid = Self::pyramid(5);
         let mut base = Self::antiprism(5);
-        base.extend(FaceIdx::new(1), &pyramid, FaceIdx::new(0), 0);
-        base.extend(FaceIdx::new(0), &pyramid, FaceIdx::new(0), 0);
+        base.extend_pyramid(FaceIdx::new(1));
+        base.extend_pyramid(FaceIdx::new(0));
         base
     }
 
@@ -271,6 +270,11 @@ impl PolygonGeom {
 ///////////////
 
 impl PolyModel {
+    pub fn extend_pyramid(&mut self, face: FaceIdx) {
+        let n = self.faces[face].len();
+        self.extend(face, &PolyModel::pyramid(n), FaceIdx::new(0), 0);
+    }
+
     /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
     /// The `other` polyhedron is attached by `its_face`.
     pub fn extend(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
