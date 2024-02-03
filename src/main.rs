@@ -22,6 +22,7 @@ fn main() {
                 model::Model::new("Tetrahedron", PolyModel::tetrahedron()),
                 model::Model::new("Cube", PolyModel::cube()),
                 model::Model::new("Octahedron", PolyModel::octahedron()),
+                model::Model::new("Icosahedron", PolyModel::icosahedron()),
             ],
         ),
         (
@@ -58,7 +59,7 @@ fn main() {
     ];
 
     // Create model view
-    let mut current_model = PolyModel::tetrahedron();
+    let mut current_model = PolyModel::icosahedron();
     let mut view = model_view::ModelView::new(current_model.clone(), &context, window.viewport());
 
     // Main loop

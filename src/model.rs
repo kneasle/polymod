@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use itertools::Itertools;
 use three_d::{
-    vec3, CpuMesh, Deg, Indices, InnerSpace, Instances, Mat4, Positions, Quat, SquareMatrix, Vec3,
-    Vec4, Zero,
+    vec3, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, SquareMatrix, Vec3, Vec4,
+    Zero,
 };
 
 #[derive(Debug)]
@@ -63,6 +63,14 @@ impl PolyModel {
             vec![2, 0, 4],
         ];
         Self::new(verts, faces)
+    }
+
+    pub fn icosahedron() -> Self {
+        let pyramid = Self::pyramid(5);
+        let mut base = Self::antiprism(5);
+        base.extend(FaceIdx::new(1), &pyramid, FaceIdx::new(0), 0);
+        base.extend(FaceIdx::new(0), &pyramid, FaceIdx::new(0), 0);
+        base
     }
 
     pub fn cuboctahedron() -> Self {
@@ -216,13 +224,15 @@ impl PolyModel {
     }
 
     fn new(verts: Vec<Vec3>, faces: Vec<Vec<usize>>) -> Self {
-        Self {
+        let mut m = Self {
             verts: index_vec::IndexVec::from_vec(verts),
             faces: faces
                 .into_iter()
                 .map(|verts| verts.into_iter().map(VertIdx::new).collect_vec())
                 .collect(),
-        }
+        };
+        m.make_centred();
+        m
     }
 }
 
@@ -261,14 +271,35 @@ impl PolygonGeom {
 ///////////////
 
 impl PolyModel {
+    /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
+    /// The `other` polyhedron is attached by `its_face`.
+    pub fn extend(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
+        self.merge(face, other, its_face, rotation, true);
+    }
+
     /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
     /// The `other` polyhedron is attached by `its_face`.
     pub fn excavate(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
+        self.merge(face, other, its_face, rotation, false);
+    }
+
+    fn merge(
+        &mut self,
+        face: FaceIdx,
+        other: &Self,
+        its_face: FaceIdx,
+        rotation: usize,
+        is_extrude: bool,
+    ) {
         assert_eq!(self.faces[face].len(), other.faces[its_face].len());
         // Find the matrix transformation required to place `other` in the right location to
         // join `its_face` to `face` at the correct `rotation`
-        let self_face_transform = self.face_transform(face, 0);
-        let other_face_transform = other.face_transform(its_face, rotation);
+        let self_face_transform = self.face_transform(face, 0, Side::Out);
+        let other_face_transform = other.face_transform(
+            its_face,
+            rotation,
+            if is_extrude { Side::In } else { Side::Out },
+        );
         let transform = self_face_transform * other_face_transform.invert().unwrap();
         // Merge vertices into `self`
         let new_vert_indices: VertVec<VertIdx> = other
@@ -282,7 +313,9 @@ impl PolyModel {
                 .iter()
                 .map(|v_idx| new_vert_indices[*v_idx])
                 .collect_vec();
-            new_verts.reverse();
+            if !is_extrude {
+                new_verts.reverse();
+            }
             self.faces.push(new_verts);
         }
         // Cancel any new faces (which will include cancelling the two faces used to join these
@@ -402,6 +435,12 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
 const VERTEX_MERGE_DIST: f32 = 0.00001;
 const VERTEX_MERGE_DIST_SQUARED: f32 = VERTEX_MERGE_DIST * VERTEX_MERGE_DIST;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    In,
+    Out,
+}
+
 impl PolyModel {
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
     /// at `p`, then its index is returned.
@@ -435,9 +474,9 @@ impl PolyModel {
     ///   `verts[rotation + 1]`);
     /// - The z-axis now points directly out of the face along its normal.
     /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
-    pub fn face_transform(&self, face: FaceIdx, rotation: usize) -> Mat4 {
+    pub fn face_transform(&self, face: FaceIdx, rotation: usize, side: Side) -> Mat4 {
         let translation = Mat4::from_translation(self.face_vert(face, rotation));
-        let rotation = self.face_rotation(face, rotation);
+        let rotation = self.face_rotation(face, rotation, side);
         translation * rotation
     }
 
@@ -448,11 +487,18 @@ impl PolyModel {
     /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
     ///
     /// The `rotation` will be wrapped to fit within the vertices of the face
-    pub fn face_rotation(&self, face: FaceIdx, rotation: usize) -> Mat4 {
+    pub fn face_rotation(&self, face: FaceIdx, rotation: usize, side: Side) -> Mat4 {
+        let vert_offset = match side {
+            Side::In => self.faces[face].len() - 1,
+            Side::Out => 1,
+        };
         let v0 = self.face_vert(face, rotation);
-        let v1 = self.face_vert(face, rotation + 1);
+        let v1 = self.face_vert(face, rotation + vert_offset);
         let new_y = (v1 - v0).normalize();
-        let new_z = self.face_normal(face);
+        let mut new_z = self.face_normal(face);
+        if side == Side::In {
+            new_z = -new_z;
+        }
         let new_x = new_z.cross(new_y);
         // Make a matrix to transform into this new coord system
         Mat4::from_cols(
