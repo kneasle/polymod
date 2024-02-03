@@ -1,5 +1,10 @@
+use std::collections::HashSet;
+
 use itertools::Itertools;
-use three_d::{vec3, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, Vec3};
+use three_d::{
+    vec3, CpuMesh, Deg, Indices, InnerSpace, Instances, Mat4, Positions, Quat, SquareMatrix, Vec3,
+    Vec4, Zero,
+};
 
 #[derive(Debug)]
 pub struct Model {
@@ -252,23 +257,82 @@ impl PolygonGeom {
 }
 
 ///////////////
+// MODELLING //
+///////////////
+
+impl PolyModel {
+    /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
+    /// The `other` polyhedron is attached by `its_face`.
+    pub fn excavate(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
+        assert_eq!(self.faces[face].len(), other.faces[its_face].len());
+        // Find the matrix transformation required to place `other` in the right location to
+        // join `its_face` to `face` at the correct `rotation`
+        let self_face_transform = self.face_transform(face, 0);
+        let other_face_transform = other.face_transform(its_face, rotation);
+        let transform = self_face_transform * other_face_transform.invert().unwrap();
+        // Merge vertices into `self`
+        let new_vert_indices: VertVec<VertIdx> = other
+            .verts
+            .iter()
+            .map(|&v| self.add_vert(transform_point(v, transform)))
+            .collect();
+        // Add all the new faces (turning them inside out because we're excavating)
+        for face_verts in &other.faces {
+            let mut new_verts = face_verts
+                .iter()
+                .map(|v_idx| new_vert_indices[*v_idx])
+                .collect_vec();
+            new_verts.reverse();
+            self.faces.push(new_verts);
+        }
+        // Cancel any new faces (which will include cancelling the two faces used to join these
+        // polyhedra)
+        self.cancel_faces();
+    }
+
+    /// Remove any pairs of identical but opposite faces
+    fn cancel_faces(&mut self) {
+        let normalized_faces: HashSet<Vec<VertIdx>> = self
+            .faces
+            .iter()
+            .map(|verts| normalize_face(verts))
+            .collect();
+        self.faces.retain(|verts| {
+            let mut verts = verts.clone();
+            verts.reverse();
+            let norm_verts = normalize_face(&verts);
+            let is_duplicate = normalized_faces.contains(&norm_verts);
+            !is_duplicate // Keep faces which aren't duplicates
+        });
+    }
+
+    pub fn translate(&mut self, d: Vec3) {
+        self.transform(Mat4::from_translation(d));
+    }
+
+    pub fn transform(&mut self, matrix: Mat4) {
+        for v in &mut self.verts {
+            *v = transform_point(*v, matrix);
+        }
+    }
+
+    pub fn make_centred(&mut self) {
+        self.translate(-self.centroid());
+    }
+}
+
+fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
+    let min_vert = verts.iter().position_min().unwrap();
+    let mut verts = verts.to_vec();
+    verts.rotate_left(min_vert);
+    verts
+}
+
+///////////////
 // RENDERING //
 ///////////////
 
 impl PolyModel {
-    pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
-        let mut edges = Vec::new();
-        for f in &self.faces {
-            for (&v1, &v2) in f.iter().circular_tuple_windows() {
-                edges.push((v1.min(v2), v1.max(v2)));
-            }
-        }
-        // Dedup and return edges
-        edges.sort();
-        edges.dedup();
-        edges
-    }
-
     pub fn face_mesh(&self) -> CpuMesh {
         let mut verts = Vec::new();
         let mut tri_indices = Vec::new();
@@ -334,6 +398,101 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
 ///////////
 // UTILS //
 ///////////
+
+const VERTEX_MERGE_DIST: f32 = 0.00001;
+const VERTEX_MERGE_DIST_SQUARED: f32 = VERTEX_MERGE_DIST * VERTEX_MERGE_DIST;
+
+impl PolyModel {
+    /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
+    /// at `p`, then its index is returned.
+    pub fn add_vert(&mut self, p: Vec3) -> VertIdx {
+        // Look for existing vertices to dedup with
+        for (idx, v) in self.verts.iter_enumerated() {
+            if (p - *v).magnitude2() < VERTEX_MERGE_DIST_SQUARED {
+                return idx;
+            }
+        }
+        // If vertex isn't already present, add a new one
+        self.verts.push(p)
+    }
+
+    pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
+        let mut edges = Vec::new();
+        for f in &self.faces {
+            for (&v1, &v2) in f.iter().circular_tuple_windows() {
+                edges.push((v1.min(v2), v1.max(v2)));
+            }
+        }
+        // Dedup and return edges
+        edges.sort();
+        edges.dedup();
+        edges
+    }
+
+    /// Returns a matrix which translates and rotates such that:
+    /// - The origin is now at `self.face_vert(face, rotation)`;
+    /// - The y-axis now points along the `rotation`-th edge (i.e. from `verts[rotation]` towards
+    ///   `verts[rotation + 1]`);
+    /// - The z-axis now points directly out of the face along its normal.
+    /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
+    pub fn face_transform(&self, face: FaceIdx, rotation: usize) -> Mat4 {
+        let translation = Mat4::from_translation(self.face_vert(face, rotation));
+        let rotation = self.face_rotation(face, rotation);
+        translation * rotation
+    }
+
+    /// Returns a rotation matrix which rotates the unit (x, y, z) axis onto a face, such that:
+    /// - The y-axis now points along the `rotation`-th edge (i.e. from `verts[rotation]` towards
+    ///   `verts[rotation + 1]`);
+    /// - The z-axis now points directly out of the face along its normal.
+    /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
+    ///
+    /// The `rotation` will be wrapped to fit within the vertices of the face
+    pub fn face_rotation(&self, face: FaceIdx, rotation: usize) -> Mat4 {
+        let v0 = self.face_vert(face, rotation);
+        let v1 = self.face_vert(face, rotation + 1);
+        let new_y = (v1 - v0).normalize();
+        let new_z = self.face_normal(face);
+        let new_x = new_z.cross(new_y);
+        // Make a matrix to transform into this new coord system
+        Mat4::from_cols(
+            new_x.extend(0.0),
+            new_y.extend(0.0),
+            new_z.extend(0.0),
+            Vec4::unit_w(),
+        )
+    }
+
+    pub fn face_normal(&self, face: FaceIdx) -> Vec3 {
+        assert!(self.faces[face].len() >= 3);
+        let v0 = self.face_vert(face, 0);
+        let v1 = self.face_vert(face, 1);
+        let v2 = self.face_vert(face, 2);
+        let d1 = v1 - v0;
+        let d2 = v2 - v0;
+        d1.cross(d2).normalize()
+    }
+
+    pub fn face_vert(&self, face: FaceIdx, vert: usize) -> Vec3 {
+        let face = &self.faces[face];
+        let vert_idx = face[vert % face.len()];
+        self.verts[vert_idx]
+    }
+
+    pub fn centroid(&self) -> Vec3 {
+        let mut total = Vec3::zero();
+        for v in &self.verts {
+            total += *v;
+        }
+        total / self.verts.len() as f32
+    }
+}
+
+fn transform_point(v: Vec3, matrix: Mat4) -> Vec3 {
+    let v4 = v.extend(1.0);
+    let trans_v4 = matrix * v4;
+    trans_v4.truncate()
+}
 
 index_vec::define_index_type! { pub struct VertIdx = usize; }
 index_vec::define_index_type! { pub struct FaceIdx = usize; }
