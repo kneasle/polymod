@@ -81,6 +81,17 @@ fn main() {
                     poly.excavate_antiprism(top_face);
                     poly
                 }),
+                model::Model::new("Q_4^2 / B_4", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face,
+                    } = Polyhedron::cupola(4);
+                    poly.extend_cupola(bottom_face, true);
+                    let tunnel = Polyhedron::cuboctahedron();
+                    poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0, &[]);
+                    poly
+                }),
             ],
         ),
     ];
