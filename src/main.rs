@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use model::{Polyhedron, PrismLike};
 use three_d::*;
 
@@ -106,6 +107,26 @@ fn main() {
                     poly.extend_cupola(bottom_face, true);
                     let tunnel = Polyhedron::cuboctahedron();
                     poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0, &[]);
+                    poly
+                }),
+                model::Model::new("Apanar Deltahedron", {
+                    // Create a bicupola
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face,
+                    } = Polyhedron::cupola(3);
+                    let bottom_face = poly.extend_cupola(bottom_face, true);
+                    let faces_to_add_pyramids = poly.face_indices().collect_vec();
+                    // Dig tunnel
+                    poly.excavate_antiprism(bottom_face);
+                    poly.excavate_antiprism(top_face);
+                    // Add pyramids to all faces in the bicupola which still exist
+                    for face in faces_to_add_pyramids {
+                        if poly.is_face(face) {
+                            poly.extend_pyramid(face);
+                        }
+                    }
                     poly
                 }),
             ],

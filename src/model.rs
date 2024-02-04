@@ -44,6 +44,14 @@ impl Face {
         Face::Face { verts }
     }
 
+    fn is_gravestone(&self) -> bool {
+        matches!(self, Self::Gravestone)
+    }
+
+    fn is_face(&self) -> bool {
+        !self.is_gravestone()
+    }
+
     fn verts(&self) -> Option<&[VertIdx]> {
         match self {
             Face::Gravestone => None,
@@ -596,6 +604,17 @@ impl Polyhedron {
     /// Gets the lowest-indexed face in `self` which has `n` sides.
     pub fn get_ngon(&self, n: usize) -> FaceIdx {
         self.ngons(n).next().unwrap()
+    }
+
+    pub fn face_indices(&self) -> impl DoubleEndedIterator<Item = FaceIdx> + '_ {
+        self.faces
+            .iter_enumerated()
+            .filter(|(_, f)| f.is_face())
+            .map(|(idx, _)| idx)
+    }
+
+    pub fn is_face(&self, idx: FaceIdx) -> bool {
+        self.faces[idx].is_face()
     }
 
     pub fn faces(&self) -> impl DoubleEndedIterator<Item = &[VertIdx]> + '_ {
