@@ -56,45 +56,73 @@ impl Face {
 // SHAPES //
 ////////////
 
+#[derive(Debug, Clone)]
+pub struct Pyramid {
+    pub poly: Polyhedron,
+    pub base_face: FaceIdx,
+}
+
+#[derive(Debug, Clone)]
+pub struct PrismLike {
+    pub poly: Polyhedron,
+    pub bottom_face: FaceIdx,
+    pub top_face: FaceIdx,
+}
+
 impl Polyhedron {
     pub fn tetrahedron() -> Self {
-        Self::pyramid(3)
+        Self::pyramid(3).poly
     }
 
     pub fn cube() -> Self {
-        Self::prism(4)
+        Self::prism(4).poly
     }
 
     pub fn octahedron() -> Self {
-        let mut base = Self::pyramid(4);
-        base.extend_pyramid(base.get_ngon(4));
-        base.make_centred();
-        base
+        let Pyramid {
+            mut poly,
+            base_face,
+        } = Self::pyramid(4);
+        poly.extend_pyramid(base_face);
+        poly.make_centred();
+        poly
     }
 
     pub fn icosahedron() -> Self {
-        let mut shape = Self::antiprism(5);
-        shape.extend_pyramid(shape.get_ngon(5));
-        shape.extend_pyramid(shape.get_ngon(5));
+        let PrismLike {
+            mut poly,
+            bottom_face,
+            top_face,
+        } = Self::antiprism(5);
+        poly.extend_pyramid(bottom_face);
+        poly.extend_pyramid(top_face);
         // Shape is already centred
-        shape
+        poly
     }
 
     pub fn cuboctahedron() -> Self {
-        let mut shape = Self::cupola(3);
-        shape.extend_cupola(shape.get_ngon(6), false);
-        shape.make_centred();
-        shape
+        let PrismLike {
+            mut poly,
+            bottom_face,
+            top_face: _,
+        } = Self::cupola(3);
+        poly.extend_cupola(bottom_face, false);
+        poly.make_centred();
+        poly
     }
 
     pub fn rhombicuboctahedron() -> Self {
-        let mut shape = Self::prism(8);
-        shape.extend_cupola(shape.get_ngon(8), true);
-        shape.extend_cupola(shape.get_ngon(8), true);
-        shape
+        let PrismLike {
+            mut poly,
+            bottom_face,
+            top_face,
+        } = Self::prism(8);
+        poly.extend_cupola(bottom_face, true);
+        poly.extend_cupola(top_face, true);
+        poly
     }
 
-    pub fn prism(n: usize) -> Self {
+    pub fn prism(n: usize) -> PrismLike {
         assert!(n >= 3);
         let geom = PolygonGeom::new(n);
         // Vertices
@@ -105,19 +133,22 @@ impl Polyhedron {
             verts.push(vec3(x, 0.5, z));
         }
         // Faces
-        let mut faces = vec![
-            (0..n).map(|i| i * 2 + 1).collect_vec(),   // Top face
-            (0..n).rev().map(|i| i * 2).collect_vec(), // Bottom face
-        ];
+        let mut faces = FaceVec::new();
+        let top_face = faces.push((0..n).map(|i| i * 2 + 1).collect_vec());
+        let bottom_face = faces.push((0..n).rev().map(|i| i * 2).collect_vec());
         for i1 in 0..n {
             let i2 = (i1 + 1) % n;
             faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces
         }
         // Construct
-        Self::new(verts, faces)
+        PrismLike {
+            poly: Self::new(verts, faces),
+            bottom_face,
+            top_face,
+        }
     }
 
-    pub fn antiprism(n: usize) -> Self {
+    pub fn antiprism(n: usize) -> PrismLike {
         assert!(n >= 3);
         let geom = PolygonGeom::new(n);
         let half_height =
@@ -133,18 +164,22 @@ impl Polyhedron {
         let bottom_vert = |i: usize| (i % n) * 2;
         let top_vert = |i: usize| (i % n) * 2 + 1;
         // Faces
-        let mut faces = Vec::new();
-        faces.push((0..n).rev().map(bottom_vert).collect_vec());
-        faces.push((0..n).map(top_vert).collect_vec());
+        let mut faces = FaceVec::new();
+        let bottom_face = faces.push((0..n).rev().map(bottom_vert).collect_vec());
+        let top_face = faces.push((0..n).map(top_vert).collect_vec());
         for i in 0..n {
             faces.push(vec![top_vert(i), bottom_vert(i), bottom_vert(i + 1)]);
             faces.push(vec![top_vert(i), bottom_vert(i + 1), top_vert(i + 1)]);
         }
         // Construct
-        Self::new(verts, faces)
+        PrismLike {
+            poly: Self::new(verts, faces),
+            bottom_face,
+            top_face,
+        }
     }
 
-    pub fn cupola(n: usize) -> Self {
+    pub fn cupola(n: usize) -> PrismLike {
         assert!((3..=5).contains(&n));
         let top = PolygonGeom::new(n);
         let bottom = PolygonGeom::new(n * 2);
@@ -163,9 +198,9 @@ impl Polyhedron {
         let top_vert = |i: usize| i % n;
         let bottom_vert = |i: usize| n + i % (n * 2);
         // Faces
-        let mut faces = Vec::new();
-        faces.push((0..n).collect_vec());
-        faces.push((0..n * 2).rev().map(bottom_vert).collect_vec());
+        let mut faces = FaceVec::new();
+        let top_face = faces.push((0..n).collect_vec());
+        let bottom_face = faces.push((0..n * 2).rev().map(bottom_vert).collect_vec());
         for i in 0..n {
             faces.push(vec![
                 top_vert(i + 1),
@@ -180,10 +215,14 @@ impl Polyhedron {
             ]);
         }
         // Construct
-        Self::new(verts, faces)
+        PrismLike {
+            poly: Self::new(verts, faces),
+            bottom_face,
+            top_face,
+        }
     }
 
-    pub fn pyramid(n: usize) -> Self {
+    pub fn pyramid(n: usize) -> Pyramid {
         assert!((3..=5).contains(&n));
         let geom = PolygonGeom::new(n);
         let height = f32::sqrt(1.0 - geom.out_radius * geom.out_radius);
@@ -194,16 +233,19 @@ impl Polyhedron {
             verts.push(vec3(x, 0.0, z));
         }
         // Faces
-        let mut faces = Vec::new();
-        faces.push((1..=n).rev().collect_vec()); // Bottom face
+        let mut faces = FaceVec::new();
+        let base_face = faces.push((1..=n).rev().collect_vec()); // Bottom face
         for i in 0..n {
             faces.push(vec![0, i + 1, (i + 1) % n + 1]); // Triangle faces
         }
         // Construct
-        Self::new(verts, faces)
+        Pyramid {
+            poly: Self::new(verts, faces),
+            base_face,
+        }
     }
 
-    fn new(verts: Vec<Vec3>, faces: Vec<Vec<usize>>) -> Self {
+    fn new(verts: Vec<Vec3>, faces: FaceVec<Vec<usize>>) -> Self {
         let mut m = Self {
             verts: index_vec::IndexVec::from_vec(verts),
             faces: faces
@@ -252,44 +294,96 @@ impl PolygonGeom {
 // MODELLING //
 ///////////////
 
+#[derive(PartialEq, Eq)]
+enum MergeDir {
+    Extend,
+    Excavate,
+}
+
 impl Polyhedron {
     /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
     /// The `other` polyhedron is attached by `its_face`.
-    pub fn extend(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
-        self.merge(face, other, its_face, rotation, true);
+    pub fn extend(
+        &mut self,
+        face: FaceIdx,
+        other: &Self,
+        its_face: FaceIdx,
+        rotation: usize,
+        faces_to_track: &[FaceIdx],
+    ) -> Vec<FaceIdx> {
+        self.merge(
+            face,
+            other,
+            its_face,
+            rotation,
+            MergeDir::Extend,
+            faces_to_track,
+        )
     }
 
     pub fn extend_pyramid(&mut self, face: FaceIdx) {
         let n = self.face_order(face);
-        self.extend(face, &Polyhedron::pyramid(n), FaceIdx::new(0), 0);
+        let pyramid = Polyhedron::pyramid(n);
+        self.extend(face, &pyramid.poly, pyramid.base_face, 0, &[]);
     }
 
-    pub fn extend_prism(&mut self, face: FaceIdx) {
-        let n = self.face_order(face);
-        self.extend(face, &Polyhedron::prism(n), FaceIdx::new(0), 0);
+    pub fn extend_prism(&mut self, face: FaceIdx) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Extend, 0, Self::prism)
     }
 
-    pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) {
-        let n = self.face_order(face);
-        assert!(n % 2 == 0);
-        self.extend(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
+    pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Extend, gyro as usize, |n| {
+            assert!(n % 2 == 0);
+            Self::cupola(n / 2)
+        })
     }
 
     /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
     /// The `other` polyhedron is attached by `its_face`.
-    pub fn excavate(&mut self, face: FaceIdx, other: &Self, its_face: FaceIdx, rotation: usize) {
-        self.merge(face, other, its_face, rotation, false);
+    pub fn excavate(
+        &mut self,
+        face: FaceIdx,
+        other: &Self,
+        its_face: FaceIdx,
+        rotation: usize,
+        faces_to_track: &[FaceIdx],
+    ) -> Vec<FaceIdx> {
+        self.merge(
+            face,
+            other,
+            its_face,
+            rotation,
+            MergeDir::Excavate,
+            faces_to_track,
+        )
     }
 
-    pub fn excavate_prism(&mut self, face: FaceIdx) {
-        let n = self.face_order(face);
-        self.excavate(face, &Polyhedron::prism(n), FaceIdx::new(0), 0);
+    pub fn excavate_prism(&mut self, face: FaceIdx) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Excavate, 0, Self::prism)
     }
 
-    pub fn excavate_cupola(&mut self, face: FaceIdx, gyro: bool) {
-        let n = self.face_order(face);
-        assert!(n % 2 == 0);
-        self.excavate(face, &Self::cupola(n / 2), FaceIdx::new(1), gyro as usize);
+    pub fn excavate_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Excavate, gyro as usize, |n| {
+            assert!(n % 2 == 0);
+            Self::cupola(n / 2)
+        })
+    }
+
+    fn merge_prismlike(
+        &mut self,
+        face: FaceIdx,
+        dir: MergeDir,
+        rotation: usize,
+        f: impl FnOnce(usize) -> PrismLike,
+    ) -> FaceIdx {
+        let PrismLike {
+            poly,
+            bottom_face,
+            top_face,
+        } = f(self.face_order(face));
+        let tracked_faces = self.merge(face, &poly, bottom_face, rotation, dir, &[top_face]);
+        assert_eq!(tracked_faces.len(), 1);
+        tracked_faces[0]
     }
 
     fn merge(
@@ -298,17 +392,18 @@ impl Polyhedron {
         other: &Self,
         its_face: FaceIdx,
         rotation: usize,
-        is_extrude: bool,
-    ) {
+        dir: MergeDir,
+        faces_to_track: &[FaceIdx],
+    ) -> Vec<FaceIdx> {
         assert_eq!(self.face_order(face), other.face_order(its_face));
         // Find the matrix transformation required to place `other` in the right location to
         // join `its_face` to `face` at the correct `rotation`
+        let side = match dir {
+            MergeDir::Extend => Side::In,
+            MergeDir::Excavate => Side::Out,
+        };
         let self_face_transform = self.face_transform(face, 0, Side::Out);
-        let other_face_transform = other.face_transform(
-            its_face,
-            rotation,
-            if is_extrude { Side::In } else { Side::Out },
-        );
+        let other_face_transform = other.face_transform(its_face, rotation, side);
         let transform = self_face_transform * other_face_transform.invert().unwrap();
         // Merge vertices into `self`, tracking which vertices they turn into
         let new_vert_indices: VertVec<VertIdx> = other
@@ -316,20 +411,27 @@ impl Polyhedron {
             .iter()
             .map(|&v| self.add_vert(transform_point(v, transform)))
             .collect();
-        // Add all the new faces (turning them inside out because we're excavating)
+        // Add all the new faces (turning them inside out if we're excavating)
+        let mut new_face_indices = FaceVec::new();
         for face_verts in other.faces() {
             let mut new_verts = face_verts
                 .iter()
                 .map(|v_idx| new_vert_indices[*v_idx])
                 .collect_vec();
-            if !is_extrude {
+            if dir == MergeDir::Excavate {
                 new_verts.reverse();
             }
-            self.faces.push(Face::new(new_verts));
+            let new_idx = self.faces.push(Face::new(new_verts));
+            new_face_indices.push(new_idx);
         }
         // Cancel any new faces (which will include cancelling the two faces used to join these
         // polyhedra)
         self.cancel_faces();
+        // Return the new indices of the faces we were asked to track
+        faces_to_track
+            .iter()
+            .map(|f| new_face_indices[*f])
+            .collect_vec()
     }
 
     /// Remove any pairs of identical but opposite faces
@@ -487,9 +589,9 @@ impl Polyhedron {
             .map(FaceIdx::new)
     }
 
-    /// Gets the highest-indexed face in `self` which has `n` sides.
+    /// Gets the lowest-indexed face in `self` which has `n` sides.
     pub fn get_ngon(&self, n: usize) -> FaceIdx {
-        self.ngons(n).next_back().unwrap()
+        self.ngons(n).next().unwrap()
     }
 
     pub fn faces(&self) -> impl DoubleEndedIterator<Item = &[VertIdx]> + '_ {
