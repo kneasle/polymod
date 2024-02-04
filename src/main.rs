@@ -14,6 +14,20 @@ fn main() {
     .unwrap();
     let context = window.gl();
 
+    let qpq_slash_p = |gyro: bool| -> Polyhedron {
+        let PrismLike {
+            mut poly,
+            bottom_face,
+            top_face,
+        } = Polyhedron::prism(6);
+        let face_to_excavate = poly.get_ngon(4);
+        poly.extend_cupola(bottom_face, false);
+        poly.extend_cupola(top_face, gyro);
+        let tunnel = Polyhedron::prism(6).poly;
+        poly.excavate(face_to_excavate, &tunnel, tunnel.get_ngon(4), 1, &[]);
+        poly
+    };
+
     // Base models
     let model_groups = [
         (
@@ -81,6 +95,8 @@ fn main() {
                     poly.excavate_antiprism(top_face);
                     poly
                 }),
+                model::Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
+                model::Model::new("Q_3 P_6 gQ_3 / P_6", qpq_slash_p(true)),
                 model::Model::new("Q_4^2 / B_4", {
                     let PrismLike {
                         mut poly,
