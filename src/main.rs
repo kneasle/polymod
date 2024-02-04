@@ -58,17 +58,30 @@ fn main() {
         ),
         (
             "Toroids",
-            vec![model::Model::new("Cake pan", {
-                let PrismLike {
-                    mut poly,
-                    bottom_face,
-                    top_face: _,
-                } = Polyhedron::cupola(3);
-                let next = poly.extend_prism(bottom_face);
-                let next = poly.excavate_cupola(next, true);
-                poly.excavate_prism(next);
-                poly
-            })],
+            vec![
+                model::Model::new("Cake pan", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face: _,
+                    } = Polyhedron::cupola(3);
+                    let next = poly.extend_prism(bottom_face);
+                    let next = poly.excavate_cupola(next, true);
+                    poly.excavate_prism(next);
+                    poly
+                }),
+                model::Model::new("Torturous Tunnel", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face,
+                    } = Polyhedron::cupola(3);
+                    let bottom_face = poly.extend_cupola(bottom_face, true);
+                    poly.excavate_antiprism(bottom_face);
+                    poly.excavate_antiprism(top_face);
+                    poly
+                }),
+            ],
         ),
     ];
 

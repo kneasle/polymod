@@ -362,6 +362,10 @@ impl Polyhedron {
         self.merge_prismlike(face, MergeDir::Excavate, 0, Self::prism)
     }
 
+    pub fn excavate_antiprism(&mut self, face: FaceIdx) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Excavate, 0, Self::antiprism)
+    }
+
     pub fn excavate_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Excavate, gyro as usize, |n| {
             assert!(n % 2 == 0);
