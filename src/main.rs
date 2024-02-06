@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use itertools::Itertools;
 use polyhedron::{Polyhedron, PrismLike};
 use three_d::*;
@@ -135,7 +137,10 @@ fn main() {
                         top_face,
                     } = Polyhedron::cupola(3);
                     let bottom_face = poly.extend_cupola(bottom_face, true);
-                    let faces_to_add_pyramids = poly.face_indices().collect_vec();
+                    let faces_to_add_pyramids = poly
+                        .faces_enumerated()
+                        .map(|(idx, _face)| idx)
+                        .collect_vec();
                     // Dig tunnel
                     poly.excavate_antiprism(bottom_face);
                     poly.excavate_antiprism(top_face);
@@ -169,45 +174,80 @@ fn main() {
             |egui_context| {
                 use three_d::egui::*;
                 // Left panel
-                let response = SidePanel::left("left-panel").show(egui_context, |ui| {
-                    ScrollArea::vertical().show(ui, |ui| {
-                        for (group_name, models) in &model_groups {
-                            ui.heading(*group_name);
-                            for model in models {
-                                if ui.button(&model.name).clicked() {
-                                    current_model = model.poly.clone();
+                let response =
+                    SidePanel::left("left-panel")
+                        .min_width(200.0)
+                        .show(egui_context, |ui| {
+                            ScrollArea::vertical().show(ui, |ui| {
+                                for (group_name, models) in &model_groups {
+                                    ui.heading(*group_name);
+                                    for model in models {
+                                        if ui.button(&model.name).clicked() {
+                                            current_model = model.poly.clone();
+                                        }
+                                    }
+                                    ui.add_space(20.0);
                                 }
-                            }
-                            ui.add_space(20.0);
-                        }
-                    });
-                });
+                            });
+                        });
                 left_panel_width = response.response.rect.width();
                 // Right panel
-                let response = SidePanel::right("right-panel").show(egui_context, |ui| {
-                    ui.heading("Model Info");
-                    ui.add_space(20.0);
-                    ui.strong(format!("{} faces", current_model.faces().count()));
-                    let faces_by_ngon =
-                        current_model.faces().into_group_map_by(|f| f.verts().len());
-                    ui.indent("hi", |ui| {
-                        for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
-                            let count = faces.len();
-                            ui.label(format!(
-                                "{} {}{}",
-                                count,
-                                ngon_name(*n),
-                                if count > 1 { "s" } else { "" }
-                            ));
-                        }
-                    });
+                let response =
+                    SidePanel::right("right-panel")
+                        .min_width(200.0)
+                        .show(egui_context, |ui| {
+                            ui.heading("Model Info");
+                            ui.add_space(20.0);
+                            ui.strong(format!("{} faces", current_model.faces().count()));
+                            let faces_by_ngon =
+                                current_model.faces().into_group_map_by(|f| f.verts().len());
+                            ui.indent("faces", |ui| {
+                                for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
+                                    let count = faces.len();
+                                    ui.label(format!(
+                                        "{} {}{}",
+                                        count,
+                                        ngon_name(*n),
+                                        if count > 1 { "s" } else { "" }
+                                    ));
+                                }
+                            });
 
-                    ui.add_space(10.0);
-                    ui.strong(format!("{} edges", current_model.edges().len()));
+                            ui.add_space(10.0);
+                            let edges = current_model.edges();
+                            let mut num_open_edges = 0;
+                            let mut edge_cats = BTreeMap::<(usize, usize), usize>::new();
+                            for edge in &edges {
+                                match edge.left_face {
+                                    Some(left_face) => {
+                                        let left_n = current_model.face_order(left_face);
+                                        let right_n = current_model.face_order(edge.right_face);
+                                        let cat = edge_cats
+                                            .entry((left_n.min(right_n), left_n.max(right_n)))
+                                            .or_insert(0);
+                                        *cat += 1;
+                                    }
+                                    None => num_open_edges += 1,
+                                }
+                            }
+                            ui.strong(format!("{} edges", edges.len()));
+                            ui.indent("edges", |ui| {
+                                if num_open_edges > 0 {
+                                    ui.label(format!("{num_open_edges} open edges"));
+                                }
+                                for ((n1, n2), count) in edge_cats {
+                                    ui.label(format!(
+                                        "{} {}-{}",
+                                        count,
+                                        ngon_name(n1),
+                                        ngon_name(n2)
+                                    ));
+                                }
+                            });
 
-                    ui.add_space(10.0);
-                    ui.strong(format!("{} vertices", current_model.verts().len()));
-                });
+                            ui.add_space(10.0);
+                            ui.strong(format!("{} vertices", current_model.verts().len()));
+                        });
                 right_panel_width = response.response.rect.width();
             },
         );
