@@ -192,62 +192,9 @@ fn main() {
                         });
                 left_panel_width = response.response.rect.width();
                 // Right panel
-                let response =
-                    SidePanel::right("right-panel")
-                        .min_width(200.0)
-                        .show(egui_context, |ui| {
-                            ui.heading("Model Info");
-                            ui.add_space(20.0);
-                            ui.strong(format!("{} faces", current_model.faces().count()));
-                            let faces_by_ngon =
-                                current_model.faces().into_group_map_by(|f| f.verts().len());
-                            ui.indent("faces", |ui| {
-                                for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
-                                    let count = faces.len();
-                                    ui.label(format!(
-                                        "{} {}{}",
-                                        count,
-                                        ngon_name(*n),
-                                        if count > 1 { "s" } else { "" }
-                                    ));
-                                }
-                            });
-
-                            ui.add_space(10.0);
-                            let edges = current_model.edges();
-                            let mut num_open_edges = 0;
-                            let mut edge_cats = BTreeMap::<(usize, usize), usize>::new();
-                            for edge in &edges {
-                                match edge.left_face {
-                                    Some(left_face) => {
-                                        let left_n = current_model.face_order(left_face);
-                                        let right_n = current_model.face_order(edge.right_face);
-                                        let cat = edge_cats
-                                            .entry((left_n.min(right_n), left_n.max(right_n)))
-                                            .or_insert(0);
-                                        *cat += 1;
-                                    }
-                                    None => num_open_edges += 1,
-                                }
-                            }
-                            ui.strong(format!("{} edges", edges.len()));
-                            ui.indent("edges", |ui| {
-                                if num_open_edges > 0 {
-                                    ui.label(format!("{num_open_edges} open edges"));
-                                }
-                                for ((n1, n2), count) in edge_cats {
-                                    ui.label(format!(
-                                        "{} {}-{}",
-                                        count,
-                                        ngon_name(n1),
-                                        ngon_name(n2)
-                                    ));
-                                }
-                            });
-
-                            ui.add_space(10.0);
-                            ui.strong(format!("{} vertices", current_model.verts().len()));
-                        });
+                let response = SidePanel::right("right-panel")
+                    .min_width(200.0)
+                    .show(egui_context, |ui| draw_right_panel(&current_model, ui));
                 right_panel_width = response.response.rect.width();
             },
         );
@@ -277,4 +224,56 @@ fn main() {
             ..Default::default()
         }
     });
+}
+
+fn draw_right_panel(current_model: &Polyhedron, ui: &mut egui::Ui) {
+    ui.heading("Model Info");
+
+    // Faces
+    ui.add_space(20.0);
+    ui.strong(format!("{} faces", current_model.faces().count()));
+    let faces_by_ngon = current_model.faces().into_group_map_by(|f| f.verts().len());
+    ui.indent("faces", |ui| {
+        for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
+            let count = faces.len();
+            ui.label(format!(
+                "{} {}{}",
+                count,
+                ngon_name(*n),
+                if count > 1 { "s" } else { "" }
+            ));
+        }
+    });
+
+    // Edges
+    ui.add_space(10.0);
+    let edges = current_model.edges();
+    let mut num_open_edges = 0;
+    let mut edge_cats = BTreeMap::<(usize, usize), usize>::new();
+    for edge in &edges {
+        match edge.left_face {
+            Some(left_face) => {
+                let left_n = current_model.face_order(left_face);
+                let right_n = current_model.face_order(edge.right_face);
+                let cat = edge_cats
+                    .entry((left_n.min(right_n), left_n.max(right_n)))
+                    .or_insert(0);
+                *cat += 1;
+            }
+            None => num_open_edges += 1,
+        }
+    }
+    ui.strong(format!("{} edges", edges.len()));
+    ui.indent("edges", |ui| {
+        if num_open_edges > 0 {
+            ui.label(format!("{num_open_edges} open edges"));
+        }
+        for ((n1, n2), count) in edge_cats {
+            ui.label(format!("{} {}-{}", count, ngon_name(n1), ngon_name(n2)));
+        }
+    });
+
+    // Vertices
+    ui.add_space(10.0);
+    ui.strong(format!("{} vertices", current_model.verts().len()));
 }
