@@ -1,6 +1,6 @@
 use three_d::*;
 
-use crate::model::Polyhedron;
+use crate::polyhedron::Polyhedron;
 
 pub(crate) struct ModelView {
     context: Context,
@@ -96,7 +96,7 @@ impl ModelView {
 }
 
 mod cache {
-    use crate::model::Polyhedron;
+    use crate::polyhedron::Polyhedron;
     use three_d::*;
 
     /// Caches the [`Mesh`]es for the model rendered in the last frame.  This means if the same

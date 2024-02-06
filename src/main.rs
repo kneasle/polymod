@@ -1,11 +1,11 @@
 use itertools::Itertools;
-use model::{Polyhedron, PrismLike};
+use polyhedron::{Polyhedron, PrismLike};
 use three_d::*;
 
 use crate::utils::ngon_name;
 
-mod model;
 mod model_view;
+mod polyhedron;
 mod utils;
 
 #[derive(Debug)]
