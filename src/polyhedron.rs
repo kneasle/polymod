@@ -11,37 +11,21 @@ use three_d::{
 pub struct Polyhedron {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
-    faces: FaceVec<Face>,
+    faces: FaceVec<Option<Face>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Face {
-    /// Marks that a face has been removed, in order to preserve face indices when faces are
-    /// removed
-    Gravestone,
-    Face {
-        verts: Vec<VertIdx>,
-    },
+pub struct Face {
+    verts: Vec<VertIdx>,
 }
 
 impl Face {
-    fn new(verts: Vec<VertIdx>) -> Face {
-        Face::Face { verts }
+    fn new(verts: Vec<VertIdx>) -> Self {
+        Self { verts }
     }
 
-    fn is_gravestone(&self) -> bool {
-        matches!(self, Self::Gravestone)
-    }
-
-    fn is_face(&self) -> bool {
-        !self.is_gravestone()
-    }
-
-    fn verts(&self) -> Option<&[VertIdx]> {
-        match self {
-            Face::Gravestone => None,
-            Face::Face { verts } => Some(verts),
-        }
+    pub fn verts(&self) -> &[VertIdx] {
+        &self.verts
     }
 }
 
@@ -243,9 +227,10 @@ impl Polyhedron {
             verts: index_vec::IndexVec::from_vec(verts),
             faces: faces
                 .into_iter()
-                .map(|verts| Face::Face {
+                .map(|verts| Face {
                     verts: verts.into_iter().map(VertIdx::new).collect_vec(),
                 })
+                .map(Some)
                 .collect(),
         };
         m.make_centred();
@@ -410,15 +395,16 @@ impl Polyhedron {
             .collect();
         // Add all the new faces (turning them inside out if we're excavating)
         let mut new_face_indices = FaceVec::new();
-        for face_verts in other.faces() {
-            let mut new_verts = face_verts
+        for face in other.faces() {
+            let mut new_verts = face
+                .verts
                 .iter()
                 .map(|v_idx| new_vert_indices[*v_idx])
                 .collect_vec();
             if dir == MergeDir::Excavate {
                 new_verts.reverse();
             }
-            let new_idx = self.faces.push(Face::new(new_verts));
+            let new_idx = self.faces.push(Some(Face::new(new_verts)));
             new_face_indices.push(new_idx);
         }
         // Cancel any new faces (which will include cancelling the two faces used to join these
@@ -433,16 +419,18 @@ impl Polyhedron {
 
     /// Remove any pairs of identical but opposite faces
     fn cancel_faces(&mut self) {
-        let normalized_faces: HashSet<Vec<VertIdx>> =
-            self.faces().map(|verts| normalize_face(verts)).collect();
+        let normalized_faces: HashSet<Vec<VertIdx>> = self
+            .faces()
+            .map(|face| normalize_face(&face.verts))
+            .collect();
         for f in &mut self.faces {
-            if let Face::Face { verts } = &*f {
+            if let Some(Face { verts }) = &*f {
                 let mut verts = verts.clone();
                 verts.reverse();
                 let norm_verts = normalize_face(&verts);
                 let is_duplicate = normalized_faces.contains(&norm_verts);
                 if is_duplicate {
-                    *f = Face::Gravestone; // Delete the face by replacing it with a gravestone
+                    *f = None; // Delete the face by replacing it with `None` (thus preserving indices)
                 }
             }
         }
@@ -479,13 +467,13 @@ impl Polyhedron {
         let mut verts = Vec::new();
         let mut tri_indices = Vec::new();
 
-        for face_verts in self.faces() {
+        for face in self.faces() {
             // Add all vertices from this face.  We have to duplicate the vertices so that each
             // face gets flat shading
             let first_vert_idx = verts.len() as u32;
-            verts.extend(face_verts.iter().map(|vert_idx| self.verts[*vert_idx]));
+            verts.extend(face.verts.iter().map(|vert_idx| self.verts[*vert_idx]));
             // Add the vert indices for this face
-            for i in 2..face_verts.len() as u32 {
+            for i in 2..face.verts.len() as u32 {
                 tri_indices.extend_from_slice(&[
                     first_vert_idx,
                     first_vert_idx + i - 1,
@@ -570,8 +558,8 @@ impl Polyhedron {
 
     pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
         let mut edges = Vec::new();
-        for f in self.faces() {
-            for (&v1, &v2) in f.iter().circular_tuple_windows() {
+        for face in self.faces() {
+            for (&v1, &v2) in face.verts.iter().circular_tuple_windows() {
                 edges.push((v1.min(v2), v1.max(v2)));
             }
         }
@@ -586,7 +574,7 @@ impl Polyhedron {
     pub fn ngons(&self, n: usize) -> impl DoubleEndedIterator<Item = FaceIdx> + '_ {
         self.faces
             .iter()
-            .positions(move |f| f.verts().map(|v| v.len()) == Some(n))
+            .positions(move |f| f.as_ref().map(|face| face.verts.len()) == Some(n))
             .map(FaceIdx::new)
     }
 
@@ -598,16 +586,16 @@ impl Polyhedron {
     pub fn face_indices(&self) -> impl DoubleEndedIterator<Item = FaceIdx> + '_ {
         self.faces
             .iter_enumerated()
-            .filter(|(_, f)| f.is_face())
+            .filter(|(_, f)| f.is_some())
             .map(|(idx, _)| idx)
     }
 
     pub fn is_face(&self, idx: FaceIdx) -> bool {
-        self.faces[idx].is_face()
+        self.faces[idx].is_some()
     }
 
-    pub fn faces(&self) -> impl DoubleEndedIterator<Item = &[VertIdx]> + '_ {
-        self.faces.iter().filter_map(Face::verts)
+    pub fn faces(&self) -> impl DoubleEndedIterator<Item = &Face> + '_ {
+        self.faces.iter().flatten()
     }
 
     pub fn face_order(&self, face: FaceIdx) -> usize {
@@ -615,7 +603,7 @@ impl Polyhedron {
     }
 
     pub fn face_verts(&self, face: FaceIdx) -> &[VertIdx] {
-        self.faces[face].verts().unwrap()
+        &self.faces[face].as_ref().unwrap().verts
     }
 
     /// Returns a matrix which translates and rotates such that:

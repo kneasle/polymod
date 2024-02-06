@@ -188,14 +188,16 @@ fn main() {
                     ui.heading("Model Info");
                     ui.add_space(20.0);
                     ui.strong(format!("{} faces", current_model.faces().count()));
-                    let faces_by_ngon = current_model.faces().into_group_map_by(|vs| vs.len());
+                    let faces_by_ngon =
+                        current_model.faces().into_group_map_by(|f| f.verts().len());
                     ui.indent("hi", |ui| {
                         for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
+                            let count = faces.len();
                             ui.label(format!(
                                 "{} {}{}",
-                                faces.len(),
+                                count,
                                 ngon_name(*n),
-                                if faces.len() > 1 { "s" } else { "" }
+                                if count > 1 { "s" } else { "" }
                             ));
                         }
                     });
