@@ -8,6 +8,21 @@ mod model;
 mod model_view;
 mod utils;
 
+#[derive(Debug)]
+pub struct Model {
+    pub name: String,
+    pub poly: Polyhedron,
+}
+
+impl Model {
+    pub fn new(name: &str, poly: Polyhedron) -> Self {
+        Self {
+            name: name.to_owned(),
+            poly,
+        }
+    }
+}
+
 fn main() {
     // Create window
     let window = Window::new(WindowSettings {
@@ -37,47 +52,47 @@ fn main() {
         (
             "Platonic",
             vec![
-                model::Model::new("Tetrahedron", Polyhedron::tetrahedron()),
-                model::Model::new("Cube", Polyhedron::cube()),
-                model::Model::new("Octahedron", Polyhedron::octahedron()),
-                model::Model::new("Icosahedron", Polyhedron::icosahedron()),
+                Model::new("Tetrahedron", Polyhedron::tetrahedron()),
+                Model::new("Cube", Polyhedron::cube()),
+                Model::new("Octahedron", Polyhedron::octahedron()),
+                Model::new("Icosahedron", Polyhedron::icosahedron()),
             ],
         ),
         (
             "Basic",
             vec![
-                model::Model::new("3-Pyramid = Tetrahedron", Polyhedron::pyramid(3).poly),
-                model::Model::new("4-Pyramid", Polyhedron::pyramid(4).poly),
-                model::Model::new("5-Pyramid", Polyhedron::pyramid(5).poly),
-                model::Model::new("3-Cupola", Polyhedron::cupola(3).poly),
-                model::Model::new("4-Cupola", Polyhedron::cupola(4).poly),
-                model::Model::new("5-Cupola", Polyhedron::cupola(5).poly),
+                Model::new("3-Pyramid = Tetrahedron", Polyhedron::pyramid(3).poly),
+                Model::new("4-Pyramid", Polyhedron::pyramid(4).poly),
+                Model::new("5-Pyramid", Polyhedron::pyramid(5).poly),
+                Model::new("3-Cupola", Polyhedron::cupola(3).poly),
+                Model::new("4-Cupola", Polyhedron::cupola(4).poly),
+                Model::new("5-Cupola", Polyhedron::cupola(5).poly),
             ],
         ),
         (
             "Prisms & Antiprisms",
             vec![
-                model::Model::new("3-Prism", Polyhedron::prism(3).poly),
-                model::Model::new("4-Prism = Cube", Polyhedron::prism(4).poly),
-                model::Model::new("5-Prism", Polyhedron::prism(5).poly),
-                model::Model::new("6-Prism", Polyhedron::prism(6).poly),
-                model::Model::new("3-Antiprism = Octahedron", Polyhedron::antiprism(3).poly),
-                model::Model::new("4-Antiprism", Polyhedron::antiprism(4).poly),
-                model::Model::new("5-Antiprism", Polyhedron::antiprism(5).poly),
-                model::Model::new("6-Antiprism", Polyhedron::antiprism(6).poly),
+                Model::new("3-Prism", Polyhedron::prism(3).poly),
+                Model::new("4-Prism = Cube", Polyhedron::prism(4).poly),
+                Model::new("5-Prism", Polyhedron::prism(5).poly),
+                Model::new("6-Prism", Polyhedron::prism(6).poly),
+                Model::new("3-Antiprism = Octahedron", Polyhedron::antiprism(3).poly),
+                Model::new("4-Antiprism", Polyhedron::antiprism(4).poly),
+                Model::new("5-Antiprism", Polyhedron::antiprism(5).poly),
+                Model::new("6-Antiprism", Polyhedron::antiprism(6).poly),
             ],
         ),
         (
             "Archimedean",
             vec![
-                model::Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
-                model::Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
+                Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
+                Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
             ],
         ),
         (
             "Toroids",
             vec![
-                model::Model::new("Cake pan", {
+                Model::new("Cake pan", {
                     let PrismLike {
                         mut poly,
                         bottom_face,
@@ -88,7 +103,7 @@ fn main() {
                     poly.excavate_prism(next);
                     poly
                 }),
-                model::Model::new("Torturous Tunnel", {
+                Model::new("Torturous Tunnel", {
                     let PrismLike {
                         mut poly,
                         bottom_face,
@@ -99,9 +114,9 @@ fn main() {
                     poly.excavate_antiprism(top_face);
                     poly
                 }),
-                model::Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
-                model::Model::new("Q_3 P_6 gQ_3 / P_6", qpq_slash_p(true)),
-                model::Model::new("Q_4^2 / B_4", {
+                Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
+                Model::new("Q_3 P_6 gQ_3 / P_6", qpq_slash_p(true)),
+                Model::new("Q_4^2 / B_4", {
                     let PrismLike {
                         mut poly,
                         bottom_face,
@@ -112,7 +127,7 @@ fn main() {
                     poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0, &[]);
                     poly
                 }),
-                model::Model::new("Apanar Deltahedron", {
+                Model::new("Apanar Deltahedron", {
                     // Create a bicupola
                     let PrismLike {
                         mut poly,

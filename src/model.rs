@@ -6,21 +6,6 @@ use three_d::{
     Zero,
 };
 
-#[derive(Debug)]
-pub struct Model {
-    pub name: String,
-    pub poly: Polyhedron,
-}
-
-impl Model {
-    pub fn new(name: &str, poly: Polyhedron) -> Self {
-        Self {
-            name: name.to_owned(),
-            poly,
-        }
-    }
-}
-
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Polyhedron {
