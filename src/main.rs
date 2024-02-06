@@ -2,8 +2,11 @@ use itertools::Itertools;
 use model::{Polyhedron, PrismLike};
 use three_d::*;
 
+use crate::utils::ngon_name;
+
 mod model;
 mod model_view;
+mod utils;
 
 fn main() {
     // Create window
@@ -141,7 +144,8 @@ fn main() {
     let mut gui = three_d::GUI::new(&context);
     window.render_loop(move |mut frame_input| {
         // Render GUI
-        let mut panel_width = 0.0;
+        let mut left_panel_width = 0.0;
+        let mut right_panel_width = 0.0;
         let mut redraw = gui.update(
             &mut frame_input.events,
             frame_input.accumulated_time,
@@ -149,6 +153,7 @@ fn main() {
             frame_input.device_pixel_ratio,
             |egui_context| {
                 use three_d::egui::*;
+                // Left panel
                 let response = SidePanel::left("left-panel").show(egui_context, |ui| {
                     ScrollArea::vertical().show(ui, |ui| {
                         for (group_name, models) in &model_groups {
@@ -162,16 +167,41 @@ fn main() {
                         }
                     });
                 });
-                panel_width = response.response.rect.width();
+                left_panel_width = response.response.rect.width();
+                // Right panel
+                let response = SidePanel::right("right-panel").show(egui_context, |ui| {
+                    ui.heading("Model Info");
+                    ui.add_space(20.0);
+                    ui.strong(format!("{} faces", current_model.faces().count()));
+                    let faces_by_ngon = current_model.faces().into_group_map_by(|vs| vs.len());
+                    ui.indent("hi", |ui| {
+                        for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
+                            ui.label(format!(
+                                "{} {}{}",
+                                faces.len(),
+                                ngon_name(*n),
+                                if faces.len() > 1 { "s" } else { "" }
+                            ));
+                        }
+                    });
+
+                    ui.add_space(10.0);
+                    ui.strong(format!("{} edges", current_model.edges().len()));
+
+                    ui.add_space(10.0);
+                    ui.strong(format!("{} vertices", current_model.verts().len()));
+                });
+                right_panel_width = response.response.rect.width();
             },
         );
 
         // Calculate remaining viewport
-        let w = (panel_width * frame_input.device_pixel_ratio) as u32;
+        let wl = (left_panel_width * frame_input.device_pixel_ratio) as u32;
+        let wr = (right_panel_width * frame_input.device_pixel_ratio) as u32;
         let viewport = Viewport {
-            x: w as i32,
+            x: wl as i32,
             y: 0,
-            width: frame_input.viewport.width - w,
+            width: frame_input.viewport.width - wl - wr,
             height: frame_input.viewport.height,
         };
 

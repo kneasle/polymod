@@ -579,6 +579,10 @@ impl Polyhedron {
         self.verts.push(p)
     }
 
+    pub fn verts(&self) -> &[Vec3] {
+        self.verts.as_raw_slice()
+    }
+
     pub fn edges(&self) -> Vec<(VertIdx, VertIdx)> {
         let mut edges = Vec::new();
         for f in self.faces() {
