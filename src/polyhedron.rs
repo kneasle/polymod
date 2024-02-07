@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use three_d::{
-    vec3, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, SquareMatrix, Vec3, Vec4,
-    Zero,
+    vec3, Angle, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, Radians,
+    SquareMatrix, Vec3, Vec4, Zero,
 };
 
 /// A polygonal model where all faces are regular and all edges have unit length.
@@ -38,7 +38,13 @@ pub struct Edge {
     pub bottom_vert: VertIdx,
     pub top_vert: VertIdx,
     pub right_face: FaceIdx,
-    pub left_face: Option<FaceIdx>,
+    pub closed: Option<ClosedEdgeData>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClosedEdgeData {
+    pub left_face: FaceIdx,
+    pub dihedral_angle: Radians,
 }
 
 impl Edge {
@@ -47,13 +53,39 @@ impl Edge {
             bottom_vert,
             top_vert,
             right_face,
-            left_face: None,
+            closed: None,
         }
     }
 
-    fn add_left_face(&mut self, v1: VertIdx, v2: VertIdx, face_idx: FaceIdx) {
+    fn add_left_face(
+        &mut self,
+        v1: VertIdx,
+        v2: VertIdx,
+        left_face: FaceIdx,
+        polyhedron: &Polyhedron,
+    ) {
         assert_eq!((v1, v2), (self.top_vert, self.bottom_vert));
-        self.left_face = Some(face_idx);
+        self.closed = Some(ClosedEdgeData {
+            left_face,
+            dihedral_angle: self.get_dihedral_angle(left_face, polyhedron),
+        });
+    }
+
+    fn get_dihedral_angle(&self, left_face: FaceIdx, polyhedron: &Polyhedron) -> Radians {
+        let direction =
+            (polyhedron.verts[self.top_vert] - polyhedron.verts[self.bottom_vert]).normalize();
+        // Get face normals
+        let left_normal = polyhedron.face_normal(left_face);
+        let right_normal = polyhedron.face_normal(self.right_face);
+        // Get vectors pointing along the faces, perpendicular to this edge
+        let left_tangent = left_normal.cross(direction);
+        let right_tangent = right_normal.cross(-direction);
+        let mut dihedral = left_tangent.angle(right_tangent);
+        let is_concave = left_tangent.dot(right_normal) < 0.0;
+        if is_concave {
+            dihedral = Radians::full_turn() - dihedral;
+        }
+        dihedral
     }
 }
 
@@ -590,7 +622,7 @@ impl Polyhedron {
             for (&v1, &v2) in face.verts.iter().circular_tuple_windows() {
                 let key = (v1.min(v2), v1.max(v2));
                 if let Some(edge) = edges.get_mut(&key) {
-                    edge.add_left_face(v1, v2, face_idx);
+                    edge.add_left_face(v1, v2, face_idx, self);
                 } else {
                     edges.insert(key, Edge::new(v1, v2, face_idx));
                 }

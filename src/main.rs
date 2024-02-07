@@ -4,16 +4,16 @@ use itertools::Itertools;
 use polyhedron::{Polyhedron, PrismLike};
 use three_d::*;
 
-use crate::utils::ngon_name;
+use crate::{polyhedron::ClosedEdgeData, utils::ngon_name};
 
 mod model_view;
 mod polyhedron;
 mod utils;
 
 #[derive(Debug)]
-pub struct Model {
-    pub name: String,
-    pub poly: Polyhedron,
+struct Model {
+    name: String,
+    poly: Polyhedron,
 }
 
 impl Model {
@@ -100,6 +100,17 @@ fn main() {
                         bottom_face,
                         top_face: _,
                     } = Polyhedron::cupola(3);
+                    let next = poly.extend_prism(bottom_face);
+                    let next = poly.excavate_cupola(next, true);
+                    poly.excavate_prism(next);
+                    poly
+                }),
+                Model::new("Cakier pan", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face: _,
+                    } = Polyhedron::cupola(4);
                     let next = poly.extend_prism(bottom_face);
                     let next = poly.excavate_cupola(next, true);
                     poly.excavate_prism(next);
@@ -226,13 +237,13 @@ fn main() {
     });
 }
 
-fn draw_right_panel(current_model: &Polyhedron, ui: &mut egui::Ui) {
+fn draw_right_panel(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
     ui.heading("Model Info");
 
     // Faces
     ui.add_space(20.0);
-    ui.strong(format!("{} faces", current_model.faces().count()));
-    let faces_by_ngon = current_model.faces().into_group_map_by(|f| f.verts().len());
+    ui.strong(format!("{} faces", polyhedron.faces().count()));
+    let faces_by_ngon = polyhedron.faces().into_group_map_by(|f| f.verts().len());
     ui.indent("faces", |ui| {
         for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
             let count = faces.len();
@@ -246,19 +257,35 @@ fn draw_right_panel(current_model: &Polyhedron, ui: &mut egui::Ui) {
     });
 
     // Edges
+    struct EdgeType {
+        count: usize,
+        min_dihedral: f32, // Degrees
+        max_dihedral: f32, // Degrees
+    }
     ui.add_space(10.0);
-    let edges = current_model.edges();
+    let edges = polyhedron.edges();
     let mut num_open_edges = 0;
-    let mut edge_cats = BTreeMap::<(usize, usize), usize>::new();
+    let mut edge_types = BTreeMap::<(usize, usize), EdgeType>::new();
     for edge in &edges {
-        match edge.left_face {
-            Some(left_face) => {
-                let left_n = current_model.face_order(left_face);
-                let right_n = current_model.face_order(edge.right_face);
-                let cat = edge_cats
+        match edge.closed {
+            Some(ClosedEdgeData {
+                left_face,
+                dihedral_angle,
+            }) => {
+                let left_n = polyhedron.face_order(left_face);
+                let right_n = polyhedron.face_order(edge.right_face);
+                let dihedral = Degrees::from(dihedral_angle).0;
+                // Record this new edge
+                let edge_type = edge_types
                     .entry((left_n.min(right_n), left_n.max(right_n)))
-                    .or_insert(0);
-                *cat += 1;
+                    .or_insert_with(|| EdgeType {
+                        count: 0,
+                        min_dihedral: 360.0,
+                        max_dihedral: 0.0,
+                    });
+                edge_type.count += 1;
+                edge_type.min_dihedral = edge_type.min_dihedral.min(dihedral);
+                edge_type.max_dihedral = edge_type.max_dihedral.max(dihedral);
             }
             None => num_open_edges += 1,
         }
@@ -266,14 +293,26 @@ fn draw_right_panel(current_model: &Polyhedron, ui: &mut egui::Ui) {
     ui.strong(format!("{} edges", edges.len()));
     ui.indent("edges", |ui| {
         if num_open_edges > 0 {
-            ui.label(format!("{num_open_edges} open edges"));
+            ui.label(format!("{num_open_edges} open"));
         }
-        for ((n1, n2), count) in edge_cats {
-            ui.label(format!("{} {}-{}", count, ngon_name(n1), ngon_name(n2)));
+        for ((n1, n2), ty) in edge_types {
+            let has_angle_range = (ty.min_dihedral - ty.max_dihedral).abs() > 0.001;
+            let angle_string = if has_angle_range {
+                format!("{:.2}°-{:.2}°", ty.min_dihedral, ty.max_dihedral)
+            } else {
+                format!("{:.2}°", ty.min_dihedral,)
+            };
+            ui.label(format!(
+                "{} {}-{} ({})",
+                ty.count,
+                ngon_name(n1),
+                ngon_name(n2),
+                angle_string,
+            ));
         }
     });
 
     // Vertices
     ui.add_space(10.0);
-    ui.strong(format!("{} vertices", current_model.verts().len()));
+    ui.strong(format!("{} vertices", polyhedron.verts().len()));
 }
