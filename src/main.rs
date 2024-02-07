@@ -205,7 +205,7 @@ fn main() {
                 left_panel_width = response.response.rect.width();
                 // Right panel
                 let response = SidePanel::right("right-panel")
-                    .min_width(200.0)
+                    .min_width(250.0)
                     .show(egui_context, |ui| {
                         draw_right_panel(&current_model, &mut show_external_angles, ui)
                     });
@@ -214,13 +214,14 @@ fn main() {
         );
 
         // Calculate remaining viewport
-        let wl = (left_panel_width * frame_input.device_pixel_ratio) as u32;
-        let wr = (right_panel_width * frame_input.device_pixel_ratio) as u32;
+        let wl = (left_panel_width * frame_input.device_pixel_ratio) as i32;
+        let wr = (right_panel_width * frame_input.device_pixel_ratio) as i32;
+        let width = frame_input.viewport.width as i32 - wl - wr;
         let viewport = Viewport {
-            x: wl as i32,
+            x: wl,
             y: 0,
-            width: frame_input.viewport.width - wl - wr,
-            height: frame_input.viewport.height,
+            width: width.max(1) as u32,
+            height: frame_input.viewport.height as u32,
         };
 
         // Update the 3D view
