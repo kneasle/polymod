@@ -116,6 +116,17 @@ fn main() {
                     poly.excavate_prism(next);
                     poly
                 }),
+                Model::new("Cakiest pan", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face: _,
+                    } = Polyhedron::cupola(5);
+                    let next = poly.extend_prism(bottom_face);
+                    let next = poly.excavate_cupola(next, true);
+                    poly.excavate_prism(next);
+                    poly
+                }),
                 Model::new("Torturous Tunnel", {
                     let PrismLike {
                         mut poly,
