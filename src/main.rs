@@ -172,6 +172,7 @@ fn main() {
     let mut view = model_view::ModelView::new(current_model.clone(), &context, window.viewport());
 
     // Main loop
+    let mut show_external_angles = false;
     let mut gui = three_d::GUI::new(&context);
     window.render_loop(move |mut frame_input| {
         // Render GUI
@@ -205,7 +206,9 @@ fn main() {
                 // Right panel
                 let response = SidePanel::right("right-panel")
                     .min_width(200.0)
-                    .show(egui_context, |ui| draw_right_panel(&current_model, ui));
+                    .show(egui_context, |ui| {
+                        draw_right_panel(&current_model, &mut show_external_angles, ui)
+                    });
                 right_panel_width = response.response.rect.width();
             },
         );
@@ -237,8 +240,10 @@ fn main() {
     });
 }
 
-fn draw_right_panel(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
+fn draw_right_panel(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
     ui.heading("Model Info");
+
+    ui.checkbox(show_external_angles, "Measure external angles");
 
     // Faces
     ui.add_space(20.0);
@@ -274,7 +279,10 @@ fn draw_right_panel(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
             }) => {
                 let left_n = polyhedron.face_order(left_face);
                 let right_n = polyhedron.face_order(edge.right_face);
-                let dihedral = Degrees::from(dihedral_angle).0;
+                let mut dihedral = Degrees::from(dihedral_angle).0;
+                if *show_external_angles {
+                    dihedral = 360.0 - dihedral;
+                }
                 // Record this new edge
                 let edge_type = edge_types
                     .entry((left_n.min(right_n), left_n.max(right_n)))
@@ -300,7 +308,7 @@ fn draw_right_panel(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
             let angle_string = if has_angle_range {
                 format!("{:.2}°-{:.2}°", ty.min_dihedral, ty.max_dihedral)
             } else {
-                format!("{:.2}°", ty.min_dihedral,)
+                format!("{:.2}°", ty.min_dihedral)
             };
             ui.label(format!(
                 "{} {}-{} ({})",
