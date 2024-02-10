@@ -1,5 +1,11 @@
 use three_d::{Angle, InnerSpace, Radians, Vec3};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Out,
+    In,
+}
+
 pub fn ngon_name(n: usize) -> String {
     let name = match n {
         0..=2 => panic!("No n-gon of size {n}"),

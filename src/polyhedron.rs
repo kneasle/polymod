@@ -6,7 +6,7 @@ use three_d::{
     Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
 };
 
-use crate::utils::{angle_in_spherical_triangle, normalize_perpendicular_to};
+use crate::utils::{angle_in_spherical_triangle, normalize_perpendicular_to, Side};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
@@ -526,8 +526,15 @@ fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
 
 const INSIDE_TINT: Srgba = Srgba::new_opaque(127, 127, 127);
 
-#[derive(Debug, Clone, Copy)]
-pub enum RenderStyle {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RenderStyle {
+    pub face: FaceRenderStyle,
+    pub wireframe_edges: bool,
+    pub wireframe_verts: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FaceRenderStyle {
     /// Render model with solid faces and a wireframe
     Solid,
     /// Render model as ow-like origami, where each edge appears to be made from a paper module.
@@ -553,10 +560,10 @@ pub enum RenderStyle {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FixedAngle {
     pub unit_angle: Degrees,
-    pub push_outwards: bool,
+    pub push_direction: Side,
     pub add_crinkle: bool,
 }
 
@@ -568,19 +575,30 @@ pub struct Meshes {
 
 impl Polyhedron {
     pub fn meshes(&self, style: RenderStyle, context: &three_d::Context) -> Meshes {
+        const EDGE_RADIUS: f32 = 0.03;
+        const VERTEX_RADIUS: f32 = 0.05;
+
         // Generate CPU-side mesh data
         let face_mesh = self.face_mesh(style);
-        let (edges, verts) = match style {
-            RenderStyle::Solid => (self.edge_instances(), self.vertex_instances()),
-            RenderStyle::OwLike { .. } => (Instances::default(), Instances::default()),
+        let edges = match style.wireframe_edges {
+            true => self.edge_instances(),
+            false => Instances::default(),
+        };
+        let verts = match style.wireframe_verts || style.wireframe_edges {
+            true => self.vertex_instances(),
+            false => Instances::default(),
+        };
+        let vert_radius = match style.wireframe_verts {
+            true => VERTEX_RADIUS,
+            false => EDGE_RADIUS,
         };
 
         // Send mesh data to the GPU and set up instancing
         let mut sphere = CpuMesh::sphere(8);
-        sphere.transform(&Mat4::from_scale(0.05)).unwrap();
+        sphere.transform(&Mat4::from_scale(vert_radius)).unwrap();
         let mut cylinder = CpuMesh::cylinder(10);
         cylinder
-            .transform(&Mat4::from_nonuniform_scale(1.0, 0.03, 0.03))
+            .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
             .unwrap();
         Meshes {
             face_mesh: Mesh::new(context, &face_mesh),
@@ -591,7 +609,7 @@ impl Polyhedron {
 
     fn face_mesh(&self, style: RenderStyle) -> CpuMesh {
         // Create outward-facing faces
-        let faces = self.faces_to_render(style);
+        let faces = self.faces_to_render(style.face);
         let (verts, tri_indices) = Self::triangulate_mesh(faces);
 
         // Add verts and tints for inside-facing verts
@@ -621,7 +639,7 @@ impl Polyhedron {
         mesh
     }
 
-    fn faces_to_render(&self, style: RenderStyle) -> Vec<Vec<Vec3>> {
+    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<Vec<Vec3>> {
         let mut faces_to_render = Vec::new();
         for face in self.faces() {
             // Get the locations of this face's vertices
@@ -634,9 +652,9 @@ impl Polyhedron {
             // Decide how to render them, according to the style
             match style {
                 // For solid faces, just render the face as-is
-                RenderStyle::Solid => faces_to_render.push(verts),
+                FaceRenderStyle::Solid => faces_to_render.push(verts),
                 // For ow-like faces, render up to two faces per edge
-                RenderStyle::OwLike {
+                FaceRenderStyle::OwLike {
                     side_ratio,
                     fixed_angle,
                 } => {
@@ -673,7 +691,7 @@ impl Polyhedron {
                 Some(angle) => {
                     let FixedAngle {
                         unit_angle,
-                        push_outwards,
+                        push_direction,
                         add_crinkle,
                     } = angle;
                     // Calculate the unit's inset angle, and therefore break the unit length down
@@ -682,7 +700,10 @@ impl Polyhedron {
                     let l_in = side_ratio * inset_angle.cos();
                     let l_up = side_ratio * inset_angle.sin();
                     // Pick a normal to use based on the push direction
-                    let unit_up = if push_outwards { normal } else { -normal };
+                    let unit_up = match push_direction {
+                        Side::Out => normal,
+                        Side::In => -normal,
+                    };
                     let up = unit_up * l_up;
                     // Add faces
                     if add_crinkle {
@@ -793,12 +814,6 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
 
 const VERTEX_MERGE_DIST: f32 = 0.00001;
 const VERTEX_MERGE_DIST_SQUARED: f32 = VERTEX_MERGE_DIST * VERTEX_MERGE_DIST;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    In,
-    Out,
-}
 
 impl Polyhedron {
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex

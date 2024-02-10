@@ -1,14 +1,18 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use polyhedron::{Polyhedron, PrismLike};
+use polyhedron::{FaceRenderStyle, Polyhedron, PrismLike, RenderStyle};
 use three_d::*;
+use utils::Side;
 
 use crate::{polyhedron::ClosedEdgeData, utils::ngon_name};
 
 mod model_view;
 mod polyhedron;
 mod utils;
+
+const WIDE_SPACE: f32 = 20.0;
+const SMALL_SPACE: f32 = 10.0;
 
 #[derive(Debug)]
 struct Model {
@@ -178,12 +182,20 @@ fn main() {
         ),
     ];
 
+    // GUI variables
+    let mut show_external_angles = false;
+    let mut model_view_settings = ModelViewSettings::default();
+
     // Create model view
     let mut current_model = Polyhedron::cuboctahedron();
-    let mut view = model_view::ModelView::new(current_model.clone(), &context, window.viewport());
+    let mut view = model_view::ModelView::new(
+        current_model.clone(),
+        model_view_settings.as_render_style(),
+        &context,
+        window.viewport(),
+    );
 
     // Main loop
-    let mut show_external_angles = false;
     let mut gui = three_d::GUI::new(&context);
     window.render_loop(move |mut frame_input| {
         // Render GUI
@@ -209,17 +221,24 @@ fn main() {
                                             current_model = model.poly.clone();
                                         }
                                     }
-                                    ui.add_space(20.0);
+                                    ui.add_space(WIDE_SPACE);
                                 }
                             });
                         });
                 left_panel_width = response.response.rect.width();
                 // Right panel
-                let response = SidePanel::right("right-panel")
-                    .min_width(250.0)
-                    .show(egui_context, |ui| {
-                        draw_right_panel(&current_model, &mut show_external_angles, ui)
-                    });
+                let response =
+                    SidePanel::right("right-panel")
+                        .min_width(250.0)
+                        .show(egui_context, |ui| {
+                            ui.heading("View Settings");
+                            model_view_settings.gui(ui);
+
+                            ui.add_space(WIDE_SPACE);
+                            ui.separator();
+                            ui.heading("Model Info");
+                            model_info_gui(&current_model, &mut show_external_angles, ui);
+                        });
                 right_panel_width = response.response.rect.width();
             },
         );
@@ -240,7 +259,11 @@ fn main() {
         if redraw {
             let screen = frame_input.screen();
             screen.clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0));
-            view.render(&current_model, &screen);
+            view.render(
+                &current_model,
+                model_view_settings.as_render_style(),
+                &screen,
+            );
             screen.write(|| gui.render());
         }
 
@@ -252,10 +275,89 @@ fn main() {
     });
 }
 
-fn draw_right_panel(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
-    ui.add_space(20.0);
+#[derive(Debug, Clone)]
+pub struct ModelViewSettings {
+    pub style: ModelViewStyle,
+    // Ow-like unit shapes
+    pub is_flat: bool,
+    pub side_ratio: f32,
+    pub unit_angle: Degrees,
+    pub direction: Side,
+    pub add_crinkle: bool,
+    // Wireframe
+    pub wireframe_edges: bool,
+    pub wireframe_verts: bool,
+}
 
-    ui.heading("Model Info");
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelViewStyle {
+    Solid,
+    OwLike,
+}
+
+impl Default for ModelViewSettings {
+    fn default() -> Self {
+        ModelViewSettings {
+            style: ModelViewStyle::OwLike,
+            side_ratio: 0.25,
+            is_flat: false,
+            unit_angle: Deg(45.0),
+            direction: Side::Out,
+            add_crinkle: true,
+            wireframe_edges: false,
+            wireframe_verts: false,
+        }
+    }
+}
+
+impl ModelViewSettings {
+    pub fn as_render_style(&self) -> RenderStyle {
+        let face = match self.style {
+            ModelViewStyle::Solid => FaceRenderStyle::Solid,
+            ModelViewStyle::OwLike => FaceRenderStyle::OwLike {
+                side_ratio: self.side_ratio,
+                fixed_angle: match self.is_flat {
+                    true => None,
+                    false => Some(polyhedron::FixedAngle {
+                        unit_angle: self.unit_angle,
+                        push_direction: self.direction,
+                        add_crinkle: self.add_crinkle,
+                    }),
+                },
+            },
+        };
+        RenderStyle {
+            face,
+            wireframe_edges: self.wireframe_edges,
+            wireframe_verts: self.wireframe_verts,
+        }
+    }
+
+    pub fn gui(&mut self, ui: &mut egui::Ui) {
+        ui.strong("Faces");
+        ui.radio_value(&mut self.style, ModelViewStyle::Solid, "Solid");
+        ui.radio_value(&mut self.style, ModelViewStyle::OwLike, "Ow-like edge unit");
+        ui.indent("ow-like", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Side ratio: ");
+                ui.add(egui::Slider::new(&mut self.side_ratio, 0.0..=1.0).step_by(0.05));
+            });
+            ui.checkbox(&mut self.is_flat, "Flat");
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.direction, Side::In, "Push in");
+                ui.selectable_value(&mut self.direction, Side::Out, "Push out");
+            });
+            ui.checkbox(&mut self.add_crinkle, "Crinkle");
+        });
+
+        ui.add_space(SMALL_SPACE);
+        ui.strong("Wireframe");
+        ui.checkbox(&mut self.wireframe_edges, "Edges");
+        ui.checkbox(&mut self.wireframe_verts, "Vertices");
+    }
+}
+
+fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
     // Faces
     ui.strong(format!("{} faces", polyhedron.faces().count()));
     let faces_by_ngon = polyhedron.faces().into_group_map_by(|f| f.verts().len());
@@ -277,7 +379,7 @@ fn draw_right_panel(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui
         min_dihedral: f32, // Degrees
         max_dihedral: f32, // Degrees
     }
-    ui.add_space(10.0);
+    ui.add_space(SMALL_SPACE);
     let edges = polyhedron.edges();
     let mut num_open_edges = 0;
     let mut edge_types = BTreeMap::<(usize, usize), EdgeType>::new();
@@ -332,6 +434,6 @@ fn draw_right_panel(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui
     });
 
     // Vertices
-    ui.add_space(10.0);
+    ui.add_space(SMALL_SPACE);
     ui.strong(format!("{} vertices", polyhedron.verts().len()));
 }

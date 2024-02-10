@@ -1,6 +1,6 @@
 use three_d::*;
 
-use crate::polyhedron::Polyhedron;
+use crate::polyhedron::{Polyhedron, RenderStyle};
 
 /// The 3D viewport used to display a model
 pub(crate) struct ModelView {
@@ -15,7 +15,12 @@ pub(crate) struct ModelView {
 }
 
 impl ModelView {
-    pub fn new(model: Polyhedron, context: &Context, viewport: Viewport) -> Self {
+    pub fn new(
+        model: Polyhedron,
+        style: RenderStyle,
+        context: &Context,
+        viewport: Viewport,
+    ) -> Self {
         // Camera
         let target = vec3(0.0f32, 0.0, 0.0);
         let scene_radius = 6.0f32;
@@ -54,7 +59,7 @@ impl ModelView {
 
         Self {
             context: context.clone(),
-            mesh_cache: cache::MeshCache::new(model, context),
+            mesh_cache: cache::MeshCache::new(model, style, context),
 
             camera,
             control,
@@ -73,7 +78,7 @@ impl ModelView {
         redraw
     }
 
-    pub fn render(&mut self, model: &Polyhedron, target: &RenderTarget) {
+    pub fn render(&mut self, model: &Polyhedron, style: RenderStyle, target: &RenderTarget) {
         // Lights
         let ambient = AmbientLight::new(&self.context, 0.7, Srgba::WHITE);
         let directional0 =
@@ -83,7 +88,7 @@ impl ModelView {
         let lights = [&ambient as &dyn Light, &directional0, &directional1];
 
         // Meshes
-        let meshes = self.mesh_cache.get(model, &self.context);
+        let meshes = self.mesh_cache.get(model, style, &self.context);
         let face_mesh = Gm::new(&meshes.face_mesh, &self.face_material);
         let edge_mesh = Gm::new(&meshes.edge_mesh, &self.wireframe_material);
         let vertex_mesh = Gm::new(&meshes.vertex_mesh, &self.wireframe_material);
@@ -97,7 +102,7 @@ impl ModelView {
 }
 
 mod cache {
-    use crate::polyhedron::{FixedAngle, Meshes, Polyhedron, RenderStyle};
+    use crate::polyhedron::{Meshes, Polyhedron, RenderStyle};
     use three_d::*;
 
     /// Caches the [`Mesh`]es for the model rendered in the last frame.  This means if the same
@@ -105,28 +110,28 @@ mod cache {
     /// GPU.
     pub(super) struct MeshCache {
         model: Polyhedron,
+        style: RenderStyle,
         meshes: Meshes,
     }
 
     impl MeshCache {
-        pub(super) fn new(model: Polyhedron, context: &Context) -> Self {
-            let style = RenderStyle::OwLike {
-                side_ratio: 0.25,
-                fixed_angle: Some(FixedAngle {
-                    unit_angle: Deg(45.0),
-                    push_outwards: true,
-                    add_crinkle: true,
-                }),
-            };
+        pub(super) fn new(model: Polyhedron, style: RenderStyle, context: &Context) -> Self {
             Self {
                 meshes: model.meshes(style, context),
                 model,
+                style,
             }
         }
 
-        pub(super) fn get<'s>(&'s mut self, model: &Polyhedron, context: &Context) -> &'s Meshes {
-            if &self.model != model {
-                *self = Self::new(model.clone(), context);
+        pub(super) fn get<'s>(
+            &'s mut self,
+            model: &Polyhedron,
+            style: RenderStyle,
+            context: &Context,
+        ) -> &'s Meshes {
+            let has_changed = (&self.model, self.style) != (model, style);
+            if has_changed {
+                *self = Self::new(model.clone(), style, context);
             }
             &self.meshes
         }
