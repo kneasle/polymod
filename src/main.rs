@@ -246,19 +246,17 @@ fn main() {
 
         FrameOutput {
             swap_buffers: redraw,
-            wait_next_event: true,
+            wait_next_event: !redraw,
             ..Default::default()
         }
     });
 }
 
 fn draw_right_panel(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
-    ui.heading("Model Info");
-
-    ui.checkbox(show_external_angles, "Measure external angles");
-
-    // Faces
     ui.add_space(20.0);
+
+    ui.heading("Model Info");
+    // Faces
     ui.strong(format!("{} faces", polyhedron.faces().count()));
     let faces_by_ngon = polyhedron.faces().into_group_map_by(|f| f.verts().len());
     ui.indent("faces", |ui| {
@@ -330,6 +328,7 @@ fn draw_right_panel(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui
                 angle_string,
             ));
         }
+        ui.checkbox(show_external_angles, "Measure external angles");
     });
 
     // Vertices
