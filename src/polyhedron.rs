@@ -2,9 +2,11 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use three_d::{
-    vec3, Angle, CpuMesh, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh, Positions,
-    Quat, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
+    vec3, Angle, CpuMesh, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh,
+    Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
 };
+
+use crate::utils::{angle_in_spherical_triangle, normalize_perpendicular_to};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
@@ -547,8 +549,15 @@ pub enum RenderStyle {
         /// The ratio of sides of the module.  If the edge length of the model is 1, then each
         /// side of the module is `side_ratio`
         side_ratio: f32,
-        fixed_angle: Option<Radians>,
+        fixed_angle: Option<FixedAngle>,
     },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FixedAngle {
+    pub unit_angle: Degrees,
+    pub push_outwards: bool,
+    pub add_crinkle: bool,
 }
 
 pub struct Meshes {
@@ -631,28 +640,72 @@ impl Polyhedron {
                     side_ratio,
                     fixed_angle,
                 } => {
-                    // Geometry calculations
                     let normal = self.normal_from_verts(&face.verts);
-                    let in_directions = vertex_in_directions(&verts);
-
-                    let verts_and_ins = verts.iter().zip_eq(&in_directions);
-                    for ((v0, in0), (v1, in1)) in verts_and_ins.circular_tuple_windows() {
-                        match fixed_angle {
-                            // If the unit has no fixed angle, then always make the units parallel
-                            // to the faces
-                            None => faces_to_render.push(vec![
-                                *v0,
-                                *v1,
-                                v1 + in1 * side_ratio,
-                                v0 + in0 * side_ratio,
-                            ]),
-                            Some(angle) => todo!(),
-                        }
-                    }
+                    self.owlike_faces(verts, normal, side_ratio, fixed_angle, &mut faces_to_render);
                 }
             }
         }
         faces_to_render
+    }
+
+    fn owlike_faces(
+        &self,
+        verts: Vec<Vec3>,
+        normal: Vec3,
+        side_ratio: f32,
+        fixed_angle: Option<FixedAngle>,
+        faces_to_render: &mut Vec<Vec<Vec3>>,
+    ) {
+        // Geometry calculations
+        let in_directions = vertex_in_directions(&verts);
+
+        let verts_and_ins = verts.iter().zip_eq(&in_directions);
+        for ((v0, in0), (v1, in1)) in verts_and_ins.circular_tuple_windows() {
+            match fixed_angle {
+                // If the unit has no fixed angle, then always make the units parallel
+                // to the faces
+                None => faces_to_render.push(vec![
+                    *v0,
+                    *v1,
+                    v1 + in1 * side_ratio,
+                    v0 + in0 * side_ratio,
+                ]),
+                Some(angle) => {
+                    let FixedAngle {
+                        unit_angle,
+                        push_outwards,
+                        add_crinkle,
+                    } = angle;
+                    // Calculate the unit's inset angle, and therefore break the unit length down
+                    // into x/y components
+                    let inset_angle = unit_inset_angle(verts.len(), unit_angle.into());
+                    let l_in = side_ratio * inset_angle.cos();
+                    let l_up = side_ratio * inset_angle.sin();
+                    // Pick a normal to use based on the push direction
+                    let unit_up = if push_outwards { normal } else { -normal };
+                    let up = unit_up * l_up;
+                    // Add faces
+                    if add_crinkle {
+                        let v0_peak = v0 + l_in * in0 * 0.5 + up * 0.5;
+                        let v1_peak = v1 + l_in * in1 * 0.5 + up * 0.5;
+                        faces_to_render.push(vec![*v0, *v1, v1_peak, v0_peak]);
+                        faces_to_render.push(vec![
+                            v0_peak,
+                            v1_peak,
+                            v1 + l_in * in1,
+                            v0 + l_in * in0,
+                        ]);
+                    } else {
+                        faces_to_render.push(vec![
+                            *v0,
+                            *v1,
+                            v1 + l_in * in1 + up,
+                            v0 + l_in * in0 + up,
+                        ]);
+                    }
+                }
+            }
+        }
     }
 
     fn triangulate_mesh(faces: Vec<Vec<Vec3>>) -> (Vec<Vec3>, Vec<u32>) {
@@ -705,12 +758,23 @@ fn vertex_in_directions(verts: &[Vec3]) -> Vec<Vec3> {
     for (v0, v1, v2) in verts.iter().circular_tuple_windows() {
         let in_vec = ((v0 - v1) + (v2 - v1)).normalize();
         // Normalize so that it has a projected length of 1 perpendicular to the edge
-        let dist_along_edge_squared = in_vec.project_on(v2 - v1).magnitude2();
-        let perpendicular_distance = f32::sqrt(1.0 - dist_along_edge_squared);
-        in_directions.push(in_vec / perpendicular_distance);
+        let normalized = normalize_perpendicular_to(in_vec, v2 - v1);
+        in_directions.push(normalized);
     }
     in_directions.rotate_right(1); // The 0th in-direction is actually from the 1st vertex
     in_directions
+}
+
+fn unit_inset_angle(n: usize, unit_angle: Radians) -> Radians {
+    use std::f32::consts::PI;
+    let interior_ngon_angle = Rad(PI - (PI * 2.0 / n as f32));
+    let mut angle = angle_in_spherical_triangle(unit_angle, interior_ngon_angle, unit_angle);
+    // Correct NaN angles (if the corner is too wide or the unit is level with the face and
+    // rounding errors cause us to get `NaN`)
+    if angle.0.is_nan() {
+        angle.0 = 0.0;
+    }
+    angle
 }
 
 fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {

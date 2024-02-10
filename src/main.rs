@@ -179,7 +179,7 @@ fn main() {
     ];
 
     // Create model view
-    let mut current_model = Polyhedron::icosahedron();
+    let mut current_model = Polyhedron::cuboctahedron();
     let mut view = model_view::ModelView::new(current_model.clone(), &context, window.viewport());
 
     // Main loop

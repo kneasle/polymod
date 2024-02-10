@@ -97,7 +97,7 @@ impl ModelView {
 }
 
 mod cache {
-    use crate::polyhedron::{Meshes, Polyhedron, RenderStyle};
+    use crate::polyhedron::{FixedAngle, Meshes, Polyhedron, RenderStyle};
     use three_d::*;
 
     /// Caches the [`Mesh`]es for the model rendered in the last frame.  This means if the same
@@ -112,7 +112,11 @@ mod cache {
         pub(super) fn new(model: Polyhedron, context: &Context) -> Self {
             let style = RenderStyle::OwLike {
                 side_ratio: 0.25,
-                fixed_angle: None,
+                fixed_angle: Some(FixedAngle {
+                    unit_angle: Deg(45.0),
+                    push_outwards: true,
+                    add_crinkle: true,
+                }),
             };
             Self {
                 meshes: model.meshes(style, context),
