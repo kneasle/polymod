@@ -1,11 +1,15 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
 use polyhedron::{FaceRenderStyle, Polyhedron, PrismLike, RenderStyle};
 use three_d::*;
 use utils::Side;
 
-use crate::{polyhedron::ClosedEdgeData, utils::ngon_name};
+use crate::{
+    polyhedron::{ClosedEdgeData, Edge},
+    utils::ngon_name,
+};
 
 mod model_view;
 mod polyhedron;
@@ -465,15 +469,10 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
     });
 
     // Edges
-    struct EdgeType {
-        count: usize,
-        min_dihedral: f32, // Degrees
-        max_dihedral: f32, // Degrees
-    }
     ui.add_space(SMALL_SPACE);
     let edges = polyhedron.edges();
     let mut num_open_edges = 0;
-    let mut edge_types = BTreeMap::<(usize, usize), EdgeType>::new();
+    let mut edge_types = BTreeMap::<(usize, usize), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
     for edge in &edges {
         match edge.closed {
             Some(ClosedEdgeData {
@@ -483,20 +482,14 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
                 let left_n = polyhedron.face_order(left_face);
                 let right_n = polyhedron.face_order(edge.right_face);
                 let mut dihedral = Degrees::from(dihedral_angle).0;
-                if *show_external_angles {
-                    dihedral = 360.0 - dihedral;
-                }
-                // Record this new edge
-                let edge_type = edge_types
+                dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
+                                                               // Record this new edge
+                let edge_list: &mut Vec<&Edge> = edge_types
                     .entry((left_n.min(right_n), left_n.max(right_n)))
-                    .or_insert_with(|| EdgeType {
-                        count: 0,
-                        min_dihedral: 360.0,
-                        max_dihedral: 0.0,
-                    });
-                edge_type.count += 1;
-                edge_type.min_dihedral = edge_type.min_dihedral.min(dihedral);
-                edge_type.max_dihedral = edge_type.max_dihedral.max(dihedral);
+                    .or_default()
+                    .entry(OrderedFloat(dihedral))
+                    .or_default();
+                edge_list.push(edge)
             }
             None => num_open_edges += 1,
         }
@@ -506,20 +499,38 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
         if num_open_edges > 0 {
             ui.label(format!("{num_open_edges} open"));
         }
-        for ((n1, n2), ty) in edge_types {
-            let has_angle_range = (ty.min_dihedral - ty.max_dihedral).abs() > 0.001;
-            let angle_string = if has_angle_range {
-                format!("{:.2}°-{:.2}°", ty.min_dihedral, ty.max_dihedral)
+        let display_angle = |a: OrderedFloat<f32>| -> String {
+            let mut angle = a.0;
+            if *show_external_angles {
+                angle = 360.0 - angle;
+            }
+            format!("{:.2}°", angle)
+        };
+        for ((n1, n2), angle_breakdown) in edge_types {
+            assert!(!angle_breakdown.is_empty());
+            let num_edges = angle_breakdown.values().map(Vec::len).sum::<usize>();
+            // Display overall group
+            let angle_string = if angle_breakdown.len() == 1 {
+                let only_angle = *angle_breakdown.keys().next().unwrap();
+                format!(" ({})", display_angle(only_angle))
             } else {
-                format!("{:.2}°", ty.min_dihedral)
+                format!("")
             };
             ui.label(format!(
-                "{} {}-{} ({})",
-                ty.count,
+                "{} {}-{}{}",
+                num_edges,
                 ngon_name(n1),
                 ngon_name(n2),
                 angle_string,
             ));
+            // Add a angle breakdown if needed
+            if angle_breakdown.len() > 1 {
+                ui.indent("", |ui| {
+                    for (angle, edges) in angle_breakdown {
+                        ui.label(format!("{}x {}", edges.len(), display_angle(angle)));
+                    }
+                });
+            }
         }
         ui.checkbox(show_external_angles, "Measure external angles");
     });
