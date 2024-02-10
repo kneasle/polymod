@@ -278,10 +278,12 @@ fn main() {
 #[derive(Debug, Clone)]
 pub struct ModelViewSettings {
     pub style: ModelViewStyle,
-    // Ow-like unit shapes
-    pub is_flat: bool,
+    // Flat ow-like unit
     pub side_ratio: f32,
-    pub unit_angle: Degrees,
+    // Ow-like unit
+    pub paper_ratio_w: usize,
+    pub paper_ratio_h: usize,
+    pub unit: OwUnit,
     pub direction: Side,
     pub add_crinkle: bool,
     // Wireframe
@@ -292,18 +294,31 @@ pub struct ModelViewSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelViewStyle {
     Solid,
-    OwLike,
+    OwLikeFlat,
+    OwLikeAngled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwUnit {
+    Deg60,
+    SturdyEdgeModule90,
+    CustomDeg90,
+    Deg120,
+    Deg135,
 }
 
 impl Default for ModelViewSettings {
     fn default() -> Self {
         ModelViewSettings {
-            style: ModelViewStyle::OwLike,
+            style: ModelViewStyle::OwLikeAngled,
             side_ratio: 0.25,
-            is_flat: false,
-            unit_angle: Deg(45.0),
-            direction: Side::Out,
-            add_crinkle: true,
+
+            paper_ratio_w: 3,
+            paper_ratio_h: 2,
+            unit: OwUnit::CustomDeg90,
+            direction: Side::In,
+            add_crinkle: false,
+
             wireframe_edges: false,
             wireframe_verts: false,
         }
@@ -314,17 +329,26 @@ impl ModelViewSettings {
     pub fn as_render_style(&self) -> RenderStyle {
         let face = match self.style {
             ModelViewStyle::Solid => FaceRenderStyle::Solid,
-            ModelViewStyle::OwLike => FaceRenderStyle::OwLike {
+            ModelViewStyle::OwLikeFlat => FaceRenderStyle::OwLike {
                 side_ratio: self.side_ratio,
-                fixed_angle: match self.is_flat {
-                    true => None,
-                    false => Some(polyhedron::FixedAngle {
-                        unit_angle: self.unit_angle,
+                fixed_angle: None,
+            },
+            ModelViewStyle::OwLikeAngled => {
+                // Model the geometry of the unit
+                let paper_aspect = self.paper_ratio_h as f32 / self.paper_ratio_w as f32;
+                let (length_reduction, unit_angle) = self.unit.geometry(paper_aspect);
+                let unit_spine_length = 1.0 - length_reduction * 2.0;
+                let unit_width = paper_aspect / 4.0;
+                // Construct unit info
+                FaceRenderStyle::OwLike {
+                    side_ratio: unit_width / unit_spine_length,
+                    fixed_angle: Some(polyhedron::FixedAngle {
+                        unit_angle,
                         push_direction: self.direction,
                         add_crinkle: self.add_crinkle,
                     }),
-                },
-            },
+                }
+            }
         };
         RenderStyle {
             face,
@@ -336,13 +360,37 @@ impl ModelViewSettings {
     pub fn gui(&mut self, ui: &mut egui::Ui) {
         ui.strong("Faces");
         ui.radio_value(&mut self.style, ModelViewStyle::Solid, "Solid");
-        ui.radio_value(&mut self.style, ModelViewStyle::OwLike, "Ow-like edge unit");
-        ui.indent("ow-like", |ui| {
+        ui.radio_value(
+            &mut self.style,
+            ModelViewStyle::OwLikeFlat,
+            "Ow-like edge unit (flat)",
+        );
+        ui.indent("ow-like-flat", |ui| {
             ui.horizontal(|ui| {
                 ui.label("Side ratio: ");
                 ui.add(egui::Slider::new(&mut self.side_ratio, 0.0..=1.0).step_by(0.05));
             });
-            ui.checkbox(&mut self.is_flat, "Flat");
+        });
+        ui.radio_value(
+            &mut self.style,
+            ModelViewStyle::OwLikeAngled,
+            "Ow-like edge unit",
+        );
+        ui.indent("ow-like-angled", |ui| {
+            egui::ComboBox::new("ow-unit", "")
+                .selected_text(self.unit.name())
+                .show_ui(ui, |ui| {
+                    for unit in OwUnit::ALL {
+                        ui.selectable_value(&mut self.unit, unit, unit.name());
+                    }
+                });
+            ui.horizontal(|ui| {
+                ui.label("Folded from");
+                ui.add(egui::DragValue::new(&mut self.paper_ratio_w));
+                ui.label(":");
+                ui.add(egui::DragValue::new(&mut self.paper_ratio_h));
+                ui.label("paper.");
+            });
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.direction, Side::In, "Push in");
                 ui.selectable_value(&mut self.direction, Side::Out, "Push out");
@@ -354,6 +402,49 @@ impl ModelViewSettings {
         ui.strong("Wireframe");
         ui.checkbox(&mut self.wireframe_edges, "Edges");
         ui.checkbox(&mut self.wireframe_verts, "Vertices");
+    }
+}
+
+impl OwUnit {
+    const ALL: [Self; 5] = [
+        OwUnit::Deg60,
+        OwUnit::SturdyEdgeModule90,
+        OwUnit::CustomDeg90,
+        OwUnit::Deg120,
+        OwUnit::Deg135,
+    ];
+
+    /// If this `unit` is folded from paper with an aspect ratio of `paper_aspect`, what is the
+    /// `(width reduction, unit angle)` of this unit
+    ///
+    /// Note: the length perpendicular to the model's edge is `paper_aspect` times that of the length
+    /// parallel to the model's edge.
+    pub fn geometry(self, paper_aspect: f32) -> (f32, Degrees) {
+        // Derived from folding patterns:
+        // - https://owrigami.com/show_diagram.php?diagram=120
+        // - https://owrigami.com/show_diagram.php?diagram=135
+        const DEG_120_REDUCTION: f32 = 0.28867513459; // 0.5 * tan(30 deg)
+        const DEG_135_REDUCTION: f32 = 0.82842712474; // 2 * tan(22.5 deg)
+
+        // Reduction factor is a multiple of 1/4 of the paper's height
+        let (reduction_factor, angle) = match self {
+            OwUnit::Deg60 => (0.0, Deg(60.0)),
+            OwUnit::SturdyEdgeModule90 => (0.5, Deg(90.0)),
+            OwUnit::CustomDeg90 => (1.0, Deg(90.0)),
+            OwUnit::Deg120 => (DEG_120_REDUCTION, Deg(120.0)),
+            OwUnit::Deg135 => (DEG_135_REDUCTION, Deg(135.0)),
+        };
+        (paper_aspect * 0.25 * reduction_factor, angle / 2.0)
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            OwUnit::Deg60 => "Ow's 60° unit",
+            OwUnit::SturdyEdgeModule90 => "StEM (90°)",
+            OwUnit::CustomDeg90 => "Custom 90° unit",
+            OwUnit::Deg120 => "Ow's 120° unit",
+            OwUnit::Deg135 => "Ow's 135° unit",
+        }
     }
 }
 
