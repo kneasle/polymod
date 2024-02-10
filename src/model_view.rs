@@ -2,6 +2,7 @@ use three_d::*;
 
 use crate::polyhedron::Polyhedron;
 
+/// The 3D viewport used to display a model
 pub(crate) struct ModelView {
     context: Context,
     mesh_cache: cache::MeshCache,
@@ -96,7 +97,7 @@ impl ModelView {
 }
 
 mod cache {
-    use crate::polyhedron::Polyhedron;
+    use crate::polyhedron::{Meshes, Polyhedron, RenderStyle};
     use three_d::*;
 
     /// Caches the [`Mesh`]es for the model rendered in the last frame.  This means if the same
@@ -107,27 +108,14 @@ mod cache {
         meshes: Meshes,
     }
 
-    pub(super) struct Meshes {
-        pub face_mesh: Mesh,
-        pub edge_mesh: InstancedMesh,
-        pub vertex_mesh: InstancedMesh,
-    }
-
     impl MeshCache {
         pub(super) fn new(model: Polyhedron, context: &Context) -> Self {
-            let mut sphere = CpuMesh::sphere(8);
-            sphere.transform(&Mat4::from_scale(0.05)).unwrap();
-            let mut cylinder = CpuMesh::cylinder(10);
-            cylinder
-                .transform(&Mat4::from_nonuniform_scale(1.0, 0.03, 0.03))
-                .unwrap();
-
+            let style = RenderStyle::OwLike {
+                side_ratio: 0.25,
+                fixed_angle: None,
+            };
             Self {
-                meshes: Meshes {
-                    face_mesh: Mesh::new(context, &model.face_mesh()),
-                    edge_mesh: InstancedMesh::new(context, &model.edge_instances(), &cylinder),
-                    vertex_mesh: InstancedMesh::new(context, &model.vertex_instances(), &sphere),
-                },
+                meshes: model.meshes(style, context),
                 model,
             }
         }

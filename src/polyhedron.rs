@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use three_d::{
-    vec3, Angle, CpuMesh, Indices, InnerSpace, Instances, Mat4, Positions, Quat, Radians,
-    SquareMatrix, Vec3, Vec4, Zero,
+    vec3, Angle, CpuMesh, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh, Positions,
+    Quat, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
 };
 
 /// A polygonal model where all faces are regular and all edges have unit length.
@@ -522,18 +522,150 @@ fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
 // RENDERING //
 ///////////////
 
+const INSIDE_TINT: Srgba = Srgba::new_opaque(127, 127, 127);
+
+#[derive(Debug, Clone, Copy)]
+pub enum RenderStyle {
+    /// Render model with solid faces and a wireframe
+    Solid,
+    /// Render model as ow-like origami, where each edge appears to be made from a paper module.
+    /// The modules look like:
+    /// ```
+    ///    +--------------------------------------------+       ---+
+    ///   /                                              \         |
+    ///  /                                                \        | `side_ratio`
+    /// +--------------------------------------------------+    ---+
+    ///  \                                                / <-- internal angle = `fixed_angle`
+    ///   \                                              /
+    ///    +--------------------------------------------+
+    /// |                                                  |
+    /// |                                                  |
+    /// +--------------------------------------------------+
+    ///         edge length (should always be `1.0`)
+    /// ```
+    OwLike {
+        /// The ratio of sides of the module.  If the edge length of the model is 1, then each
+        /// side of the module is `side_ratio`
+        side_ratio: f32,
+        fixed_angle: Option<Radians>,
+    },
+}
+
+pub struct Meshes {
+    pub face_mesh: Mesh,
+    pub edge_mesh: InstancedMesh,
+    pub vertex_mesh: InstancedMesh,
+}
+
 impl Polyhedron {
-    pub fn face_mesh(&self) -> CpuMesh {
+    pub fn meshes(&self, style: RenderStyle, context: &three_d::Context) -> Meshes {
+        // Generate CPU-side mesh data
+        let face_mesh = self.face_mesh(style);
+        let (edges, verts) = match style {
+            RenderStyle::Solid => (self.edge_instances(), self.vertex_instances()),
+            RenderStyle::OwLike { .. } => (Instances::default(), Instances::default()),
+        };
+
+        // Send mesh data to the GPU and set up instancing
+        let mut sphere = CpuMesh::sphere(8);
+        sphere.transform(&Mat4::from_scale(0.05)).unwrap();
+        let mut cylinder = CpuMesh::cylinder(10);
+        cylinder
+            .transform(&Mat4::from_nonuniform_scale(1.0, 0.03, 0.03))
+            .unwrap();
+        Meshes {
+            face_mesh: Mesh::new(context, &face_mesh),
+            edge_mesh: InstancedMesh::new(context, &edges, &cylinder),
+            vertex_mesh: InstancedMesh::new(context, &verts, &sphere),
+        }
+    }
+
+    fn face_mesh(&self, style: RenderStyle) -> CpuMesh {
+        // Create outward-facing faces
+        let faces = self.faces_to_render(style);
+        let (verts, tri_indices) = Self::triangulate_mesh(faces);
+
+        // Add verts and tints for inside-facing verts
+        let mut all_verts = verts.clone();
+        all_verts.extend_from_within(..);
+        let colors = (std::iter::repeat(Srgba::WHITE).take(verts.len()))
+            .chain(std::iter::repeat(INSIDE_TINT).take(verts.len()))
+            .collect_vec();
+        // Add inside-facing faces
+        let vert_offset = verts.len() as u32;
+        let mut all_tri_indices = tri_indices.clone();
+        for vs in tri_indices.chunks_exact(3) {
+            all_tri_indices.extend_from_slice(&[
+                vert_offset + vs[0],
+                vert_offset + vs[2],
+                vert_offset + vs[1],
+            ]);
+        }
+
+        let mut mesh = CpuMesh {
+            positions: Positions::F32(all_verts),
+            colors: Some(colors),
+            indices: Indices::U32(all_tri_indices),
+            ..Default::default()
+        };
+        mesh.compute_normals();
+        mesh
+    }
+
+    fn faces_to_render(&self, style: RenderStyle) -> Vec<Vec<Vec3>> {
+        let mut faces_to_render = Vec::new();
+        for face in self.faces() {
+            // Get the locations of this face's vertices
+            let verts = face
+                .verts
+                .iter()
+                .map(|vert_idx| self.verts[*vert_idx])
+                .collect_vec();
+
+            // Decide how to render them, according to the style
+            match style {
+                // For solid faces, just render the face as-is
+                RenderStyle::Solid => faces_to_render.push(verts),
+                // For ow-like faces, render up to two faces per edge
+                RenderStyle::OwLike {
+                    side_ratio,
+                    fixed_angle,
+                } => {
+                    // Geometry calculations
+                    let normal = self.normal_from_verts(&face.verts);
+                    let in_directions = vertex_in_directions(&verts);
+
+                    let verts_and_ins = verts.iter().zip_eq(&in_directions);
+                    for ((v0, in0), (v1, in1)) in verts_and_ins.circular_tuple_windows() {
+                        match fixed_angle {
+                            // If the unit has no fixed angle, then always make the units parallel
+                            // to the faces
+                            None => faces_to_render.push(vec![
+                                *v0,
+                                *v1,
+                                v1 + in1 * side_ratio,
+                                v0 + in0 * side_ratio,
+                            ]),
+                            Some(angle) => todo!(),
+                        }
+                    }
+                }
+            }
+        }
+        faces_to_render
+    }
+
+    fn triangulate_mesh(faces: Vec<Vec<Vec3>>) -> (Vec<Vec3>, Vec<u32>) {
         let mut verts = Vec::new();
         let mut tri_indices = Vec::new();
 
-        for face in self.faces() {
+        for face_verts in faces {
             // Add all vertices from this face.  We have to duplicate the vertices so that each
             // face gets flat shading
             let first_vert_idx = verts.len() as u32;
-            verts.extend(face.verts.iter().map(|vert_idx| self.verts[*vert_idx]));
+            verts.extend_from_slice(&face_verts);
             // Add the vert indices for this face
-            for i in 2..face.verts.len() as u32 {
+            for i in 2..face_verts.len() as u32 {
                 tri_indices.extend_from_slice(&[
                     first_vert_idx,
                     first_vert_idx + i - 1,
@@ -541,17 +673,10 @@ impl Polyhedron {
                 ]);
             }
         }
-
-        let mut mesh = CpuMesh {
-            positions: Positions::F32(verts),
-            indices: Indices::U32(tri_indices),
-            ..Default::default()
-        };
-        mesh.compute_normals();
-        mesh
+        (verts, tri_indices)
     }
 
-    pub fn edge_instances(&self) -> Instances {
+    fn edge_instances(&self) -> Instances {
         Instances {
             transformations: self
                 .edges()
@@ -562,7 +687,7 @@ impl Polyhedron {
         }
     }
 
-    pub fn vertex_instances(&self) -> Instances {
+    fn vertex_instances(&self) -> Instances {
         Instances {
             transformations: self
                 .verts
@@ -573,6 +698,19 @@ impl Polyhedron {
             ..Default::default()
         }
     }
+}
+
+fn vertex_in_directions(verts: &[Vec3]) -> Vec<Vec3> {
+    let mut in_directions = Vec::new();
+    for (v0, v1, v2) in verts.iter().circular_tuple_windows() {
+        let in_vec = ((v0 - v1) + (v2 - v1)).normalize();
+        // Normalize so that it has a projected length of 1 perpendicular to the edge
+        let dist_along_edge_squared = in_vec.project_on(v2 - v1).magnitude2();
+        let perpendicular_distance = f32::sqrt(1.0 - dist_along_edge_squared);
+        in_directions.push(in_vec / perpendicular_distance);
+    }
+    in_directions.rotate_right(1); // The 0th in-direction is actually from the 1st vertex
+    in_directions
 }
 
 fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
