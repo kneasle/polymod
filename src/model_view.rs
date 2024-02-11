@@ -39,9 +39,9 @@ impl ModelView {
         let mut face_material = PhysicalMaterial::new_opaque(
             context,
             &CpuMaterial {
-                albedo: Srgba::new_opaque(200, 200, 200),
+                albedo: Srgba::WHITE,
                 roughness: 0.7,
-                metallic: 0.8,
+                metallic: 0.0,
                 ..Default::default()
             },
         );
@@ -49,7 +49,7 @@ impl ModelView {
         let mut wireframe_material = PhysicalMaterial::new_opaque(
             context,
             &CpuMaterial {
-                albedo: Srgba::new_opaque(200, 50, 50),
+                albedo: Srgba::WHITE,
                 roughness: 0.7,
                 metallic: 0.8,
                 ..Default::default()

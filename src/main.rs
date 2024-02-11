@@ -172,8 +172,10 @@ fn main() {
                         .map(|(idx, _face)| idx)
                         .collect_vec();
                     // Dig tunnel
-                    poly.excavate_antiprism(bottom_face);
-                    poly.excavate_antiprism(top_face);
+                    poly.color_edges_added_by(Srgba::BLUE, |poly| {
+                        poly.excavate_antiprism(bottom_face);
+                        poly.excavate_antiprism(top_face);
+                    });
                     // Add pyramids to all faces in the bicupola which still exist
                     for face in faces_to_add_pyramids {
                         if poly.is_face(face) {

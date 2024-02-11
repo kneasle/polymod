@@ -14,6 +14,7 @@ pub struct Polyhedron {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Option<Face>>,
+    edges: HashMap<(VertIdx, VertIdx), EdgeData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,10 +36,16 @@ impl Face {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EdgeData {
+    color: Option<Srgba>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Edge {
     pub bottom_vert: VertIdx,
     pub top_vert: VertIdx,
+    pub color: Option<Srgba>,
     pub right_face: FaceIdx,
     pub closed: Option<ClosedEdgeData>,
 }
@@ -50,15 +57,6 @@ pub struct ClosedEdgeData {
 }
 
 impl Edge {
-    fn new(bottom_vert: VertIdx, top_vert: VertIdx, right_face: FaceIdx) -> Self {
-        Self {
-            bottom_vert,
-            top_vert,
-            right_face,
-            closed: None,
-        }
-    }
-
     fn add_left_face(
         &mut self,
         v1: VertIdx,
@@ -294,6 +292,7 @@ impl Polyhedron {
                 })
                 .map(Some)
                 .collect(),
+            edges: HashMap::new(),
         };
         m.make_centred();
         m
@@ -498,6 +497,24 @@ impl Polyhedron {
         }
     }
 
+    /// Perform a given `operation`, and set the colours of any new edges to the given `colour`
+    pub fn color_edges_added_by<T>(
+        &mut self,
+        color: Srgba,
+        operation: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let first_new_vert_idx = self.verts.len_idx();
+        let result = operation(self);
+        // Colour any edges which contain one or more new vertex
+        for e in self.edges() {
+            if e.top_vert >= first_new_vert_idx || e.bottom_vert >= first_new_vert_idx {
+                self.set_edge_color(e.bottom_vert, e.top_vert, color);
+            }
+        }
+
+        result
+    }
+
     pub fn translate(&mut self, d: Vec3) {
         self.transform(Mat4::from_translation(d));
     }
@@ -524,7 +541,9 @@ fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
 // RENDERING //
 ///////////////
 
-const INSIDE_TINT: Srgba = Srgba::new_opaque(127, 127, 127);
+const DEFAULT_EDGE_COLOR: Srgba = Srgba::WHITE;
+const DEFAULT_WIREFRAME_COLOR: Srgba = Srgba::new_opaque(50, 50, 50);
+const INSIDE_TINT: f32 = 0.5;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RenderStyle {
@@ -610,14 +629,21 @@ impl Polyhedron {
     fn face_mesh(&self, style: RenderStyle) -> CpuMesh {
         // Create outward-facing faces
         let faces = self.faces_to_render(style.face);
-        let (verts, tri_indices) = Self::triangulate_mesh(faces);
+        let (verts, colors, tri_indices) = Self::triangulate_mesh(faces);
 
-        // Add verts and tints for inside-facing verts
+        // Add verts colors for inside-facing verts
         let mut all_verts = verts.clone();
         all_verts.extend_from_within(..);
-        let colors = (std::iter::repeat(Srgba::WHITE).take(verts.len()))
-            .chain(std::iter::repeat(INSIDE_TINT).take(verts.len()))
-            .collect_vec();
+        let mut all_colors = colors.clone();
+        for c in colors {
+            let darken = |c: u8| -> u8 { (c as f32 * INSIDE_TINT) as u8 };
+            all_colors.push(Srgba {
+                r: darken(c.r),
+                g: darken(c.g),
+                b: darken(c.b),
+                a: c.a,
+            });
+        }
         // Add inside-facing faces
         let vert_offset = verts.len() as u32;
         let mut all_tri_indices = tri_indices.clone();
@@ -631,7 +657,7 @@ impl Polyhedron {
 
         let mut mesh = CpuMesh {
             positions: Positions::F32(all_verts),
-            colors: Some(colors),
+            colors: Some(all_colors),
             indices: Indices::U32(all_tri_indices),
             ..Default::default()
         };
@@ -639,27 +665,26 @@ impl Polyhedron {
         mesh
     }
 
-    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<Vec<Vec3>> {
+    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(Srgba, Vec<Vec3>)> {
         let mut faces_to_render = Vec::new();
         for face in self.faces() {
-            // Get the locations of this face's vertices
-            let verts = face
-                .verts
-                .iter()
-                .map(|vert_idx| self.verts[*vert_idx])
-                .collect_vec();
-
             // Decide how to render them, according to the style
             match style {
                 // For solid faces, just render the face as-is
-                FaceRenderStyle::Solid => faces_to_render.push(verts),
+                FaceRenderStyle::Solid => {
+                    let verts = face
+                        .verts
+                        .iter()
+                        .map(|vert_idx| self.verts[*vert_idx])
+                        .collect_vec();
+                    faces_to_render.push((Srgba::WHITE, verts));
+                }
                 // For ow-like faces, render up to two faces per edge
                 FaceRenderStyle::OwLike {
                     side_ratio,
                     fixed_angle,
                 } => {
-                    let normal = self.normal_from_verts(&face.verts);
-                    self.owlike_faces(verts, normal, side_ratio, fixed_angle, &mut faces_to_render);
+                    self.owlike_faces(&face.verts, side_ratio, fixed_angle, &mut faces_to_render);
                 }
             }
         }
@@ -668,26 +693,26 @@ impl Polyhedron {
 
     fn owlike_faces(
         &self,
-        verts: Vec<Vec3>,
-        normal: Vec3,
+        verts: &[VertIdx],
         side_ratio: f32,
         fixed_angle: Option<FixedAngle>,
-        faces_to_render: &mut Vec<Vec<Vec3>>,
+        faces_to_render: &mut Vec<(Srgba, Vec<Vec3>)>,
     ) {
         // Geometry calculations
-        let in_directions = vertex_in_directions(&verts);
+        let normal = self.normal_from_verts(&verts);
+        let in_directions = self.vertex_in_directions(&verts);
 
         let verts_and_ins = verts.iter().zip_eq(&in_directions);
-        for ((v0, in0), (v1, in1)) in verts_and_ins.circular_tuple_windows() {
+        for ((i0, in0), (i1, in1)) in verts_and_ins.circular_tuple_windows() {
+            // Extract useful data
+            let (v0, v1) = (self.verts[*i0], self.verts[*i1]);
+            let edge_color = self.get_edge_color(*i0, *i1).unwrap_or(DEFAULT_EDGE_COLOR);
+            let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
+
             match fixed_angle {
                 // If the unit has no fixed angle, then always make the units parallel
                 // to the faces
-                None => faces_to_render.push(vec![
-                    *v0,
-                    *v1,
-                    v1 + in1 * side_ratio,
-                    v0 + in0 * side_ratio,
-                ]),
+                None => add_face(vec![v0, v1, v1 + in1 * side_ratio, v0 + in0 * side_ratio]),
                 Some(angle) => {
                     let FixedAngle {
                         unit_angle,
@@ -709,35 +734,43 @@ impl Polyhedron {
                     if add_crinkle {
                         let v0_peak = v0 + l_in * in0 * 0.5 + up * 0.5;
                         let v1_peak = v1 + l_in * in1 * 0.5 + up * 0.5;
-                        faces_to_render.push(vec![*v0, *v1, v1_peak, v0_peak]);
-                        faces_to_render.push(vec![
-                            v0_peak,
-                            v1_peak,
-                            v1 + l_in * in1,
-                            v0 + l_in * in0,
-                        ]);
+                        add_face(vec![v0, v1, v1_peak, v0_peak]);
+                        add_face(vec![v0_peak, v1_peak, v1 + l_in * in1, v0 + l_in * in0]);
                     } else {
-                        faces_to_render.push(vec![
-                            *v0,
-                            *v1,
-                            v1 + l_in * in1 + up,
-                            v0 + l_in * in0 + up,
-                        ]);
+                        add_face(vec![v0, v1, v1 + l_in * in1 + up, v0 + l_in * in0 + up]);
                     }
                 }
             }
         }
     }
 
-    fn triangulate_mesh(faces: Vec<Vec<Vec3>>) -> (Vec<Vec3>, Vec<u32>) {
+    fn vertex_in_directions(&self, verts: &[VertIdx]) -> Vec<Vec3> {
+        let mut in_directions = Vec::new();
+        for (i0, i1, i2) in verts.iter().circular_tuple_windows() {
+            let v0 = self.verts[*i0];
+            let v1 = self.verts[*i1];
+            let v2 = self.verts[*i2];
+            let in_vec = ((v0 - v1) + (v2 - v1)).normalize();
+            // Normalize so that it has a projected length of 1 perpendicular to the edge
+            let normalized = normalize_perpendicular_to(in_vec, v2 - v1);
+            in_directions.push(normalized);
+        }
+        in_directions.rotate_right(1); // The 0th in-direction is actually from the 1st vertex
+        in_directions
+    }
+
+    fn triangulate_mesh(faces: Vec<(Srgba, Vec<Vec3>)>) -> (Vec<Vec3>, Vec<Srgba>, Vec<u32>) {
         let mut verts = Vec::new();
+        let mut colors = Vec::new();
         let mut tri_indices = Vec::new();
 
-        for face_verts in faces {
+        for (color, face_verts) in faces {
             // Add all vertices from this face.  We have to duplicate the vertices so that each
             // face gets flat shading
             let first_vert_idx = verts.len() as u32;
             verts.extend_from_slice(&face_verts);
+            // Add colours for this face's vertices
+            colors.extend(std::iter::repeat(color).take(face_verts.len()));
             // Add the vert indices for this face
             for i in 2..face_verts.len() as u32 {
                 tri_indices.extend_from_slice(&[
@@ -747,16 +780,26 @@ impl Polyhedron {
                 ]);
             }
         }
-        (verts, tri_indices)
+        (verts, colors, tri_indices)
     }
 
     fn edge_instances(&self) -> Instances {
+        let mut colors = Vec::new();
+        let mut transformations = Vec::new();
+        for edge in self.edges() {
+            colors.push(
+                self.get_edge_color(edge.bottom_vert, edge.top_vert)
+                    .unwrap_or(DEFAULT_WIREFRAME_COLOR),
+            );
+            transformations.push(edge_transform(
+                self.verts[edge.bottom_vert],
+                self.verts[edge.top_vert],
+            ));
+        }
+
         Instances {
-            transformations: self
-                .edges()
-                .into_iter()
-                .map(|edge| edge_transform(self.verts[edge.bottom_vert], self.verts[edge.top_vert]))
-                .collect_vec(),
+            transformations,
+            colors: Some(colors),
             ..Default::default()
         }
     }
@@ -769,21 +812,14 @@ impl Polyhedron {
                 .cloned()
                 .map(Mat4::from_translation)
                 .collect_vec(),
+            colors: Some(
+                std::iter::repeat(DEFAULT_WIREFRAME_COLOR)
+                    .take(self.verts.len())
+                    .collect_vec(),
+            ),
             ..Default::default()
         }
     }
-}
-
-fn vertex_in_directions(verts: &[Vec3]) -> Vec<Vec3> {
-    let mut in_directions = Vec::new();
-    for (v0, v1, v2) in verts.iter().circular_tuple_windows() {
-        let in_vec = ((v0 - v1) + (v2 - v1)).normalize();
-        // Normalize so that it has a projected length of 1 perpendicular to the edge
-        let normalized = normalize_perpendicular_to(in_vec, v2 - v1);
-        in_directions.push(normalized);
-    }
-    in_directions.rotate_right(1); // The 0th in-direction is actually from the 1st vertex
-    in_directions
 }
 
 fn unit_inset_angle(n: usize, unit_angle: Radians) -> Radians {
@@ -841,12 +877,29 @@ impl Polyhedron {
                 if let Some(edge) = edges.get_mut(&key) {
                     edge.add_left_face(v1, v2, face_idx, self);
                 } else {
-                    edges.insert(key, Edge::new(v1, v2, face_idx));
+                    let edge = Edge {
+                        bottom_vert: v1,
+                        top_vert: v2,
+                        color: self.get_edge_color(v1, v2),
+                        right_face: face_idx,
+                        closed: None,
+                    };
+                    edges.insert(key, edge);
                 }
             }
         }
         // Dedup and return edges
         edges.into_values().collect_vec()
+    }
+
+    pub fn get_edge_color(&self, i0: VertIdx, i1: VertIdx) -> Option<Srgba> {
+        let key = (i0.min(i1), i0.max(i1));
+        self.edges.get(&key).and_then(|e| e.color)
+    }
+
+    pub fn set_edge_color(&mut self, i0: VertIdx, i1: VertIdx, color: Srgba) {
+        let key = (i0.min(i1), i0.max(i1));
+        self.edges.insert(key, EdgeData { color: Some(color) });
     }
 
     /// Gets an [`Iterator`] over the [indices](FaceIdx) of every face in `self` which has `n`
