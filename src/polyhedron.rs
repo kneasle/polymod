@@ -80,6 +80,7 @@ impl Edge {
         // Get vectors pointing along the faces, perpendicular to this edge
         let left_tangent = left_normal.cross(direction);
         let right_tangent = right_normal.cross(-direction);
+        // Use these four vectors to compute the dihedral angle
         let mut dihedral = left_tangent.angle(right_tangent);
         let is_concave = left_tangent.dot(right_normal) < 0.0;
         if is_concave {
@@ -217,6 +218,14 @@ impl Polyhedron {
     }
 
     pub fn cupola(n: usize) -> PrismLike {
+        match n {
+            3 | 4 | 5 => Self::cupola_with_top(n),
+            6 | 8 | 10 => Self::cupola_with_top(n / 2),
+            _ => panic!("No cupola has a base or top with {n} sides"),
+        }
+    }
+
+    pub fn cupola_with_top(n: usize) -> PrismLike {
         assert!((3..=5).contains(&n));
         let top = PolygonGeom::new(n);
         let bottom = PolygonGeom::new(n * 2);
