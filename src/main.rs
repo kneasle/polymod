@@ -474,7 +474,8 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
     ui.add_space(SMALL_SPACE);
     let edges = polyhedron.edges();
     let mut num_open_edges = 0;
-    let mut edge_types = BTreeMap::<(usize, usize), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
+    let mut edge_types =
+        BTreeMap::<(usize, usize, Srgba), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
     for edge in &edges {
         match edge.closed {
             Some(ClosedEdgeData {
@@ -486,8 +487,9 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
                 let mut dihedral = Degrees::from(dihedral_angle).0;
                 dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
                                                                // Record this new edge
+                let col = edge.color.unwrap_or(polyhedron::DEFAULT_EDGE_COLOR);
                 let edge_list: &mut Vec<&Edge> = edge_types
-                    .entry((left_n.min(right_n), left_n.max(right_n)))
+                    .entry((left_n.min(right_n), left_n.max(right_n), col))
                     .or_default()
                     .entry(OrderedFloat(dihedral))
                     .or_default();
@@ -508,7 +510,8 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
             }
             format!("{:.2}°", angle)
         };
-        for ((n1, n2), angle_breakdown) in edge_types {
+        for ((n1, n2, color), angle_breakdown) in edge_types {
+            let color = utils::srgba_to_egui_color(color);
             assert!(!angle_breakdown.is_empty());
             let num_edges = angle_breakdown.values().map(Vec::len).sum::<usize>();
             // Display overall group
@@ -518,18 +521,24 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
             } else {
                 format!("")
             };
-            ui.label(format!(
-                "{} {}-{}{}",
-                num_edges,
-                ngon_name(n1),
-                ngon_name(n2),
-                angle_string,
-            ));
+            ui.colored_label(
+                color,
+                format!(
+                    "{} {}-{}{}",
+                    num_edges,
+                    ngon_name(n1),
+                    ngon_name(n2),
+                    angle_string,
+                ),
+            );
             // Add a angle breakdown if needed
             if angle_breakdown.len() > 1 {
                 ui.indent("", |ui| {
                     for (angle, edges) in angle_breakdown {
-                        ui.label(format!("{}x {}", edges.len(), display_angle(angle)));
+                        ui.colored_label(
+                            color,
+                            format!("{}x {}", edges.len(), display_angle(angle)),
+                        );
                     }
                 });
             }

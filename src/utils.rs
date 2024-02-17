@@ -1,4 +1,4 @@
-use three_d::{Angle, InnerSpace, Radians, Vec3};
+use three_d::{egui, Angle, InnerSpace, Radians, Srgba, Vec3};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -37,4 +37,8 @@ pub fn angle_in_spherical_triangle(a: Radians, b: Radians, c: Radians) -> Radian
     // Formula is based on the Spherical Cosine Law
     let cos_angle = (a.cos() - b.cos() * c.cos()) / (b.sin() * c.sin());
     Radians::acos(cos_angle)
+}
+
+pub fn srgba_to_egui_color(c: Srgba) -> egui::Color32 {
+    egui::Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a)
 }
