@@ -541,7 +541,7 @@ fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
 // RENDERING //
 ///////////////
 
-const DEFAULT_EDGE_COLOR: Srgba = Srgba::WHITE;
+const DEFAULT_EDGE_COLOR: Srgba = Srgba::new_opaque(100, 100, 100);
 const DEFAULT_WIREFRAME_COLOR: Srgba = Srgba::new_opaque(50, 50, 50);
 const INSIDE_TINT: f32 = 0.5;
 
