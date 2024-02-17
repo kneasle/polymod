@@ -107,6 +107,7 @@ pub struct PrismLike {
     pub top_face: FaceIdx,
 }
 
+/// Platonic solids
 impl Polyhedron {
     pub fn tetrahedron() -> Self {
         Self::pyramid(3).poly
@@ -138,6 +139,13 @@ impl Polyhedron {
         poly
     }
 
+    pub fn dodecahedron() -> Self {
+        todo!()
+    }
+}
+
+/// Archimedean
+impl Polyhedron {
     pub fn cuboctahedron() -> Self {
         let PrismLike {
             mut poly,
@@ -159,7 +167,10 @@ impl Polyhedron {
         poly.extend_cupola(top_face, true);
         poly
     }
+}
 
+/// Basic
+impl Polyhedron {
     pub fn prism(n: usize) -> PrismLike {
         assert!(n >= 3);
         let geom = PolygonGeom::new(n);
@@ -289,22 +300,6 @@ impl Polyhedron {
             poly: Self::new(verts, faces),
             base_face,
         }
-    }
-
-    fn new(verts: Vec<Vec3>, faces: FaceVec<Vec<usize>>) -> Self {
-        let mut m = Self {
-            verts: index_vec::IndexVec::from_vec(verts),
-            faces: faces
-                .into_iter()
-                .map(|verts| Face {
-                    verts: verts.into_iter().map(VertIdx::new).collect_vec(),
-                })
-                .map(Some)
-                .collect(),
-            edges: HashMap::new(),
-        };
-        m.make_centred();
-        m
     }
 }
 
@@ -861,6 +856,22 @@ const VERTEX_MERGE_DIST: f32 = 0.00001;
 const VERTEX_MERGE_DIST_SQUARED: f32 = VERTEX_MERGE_DIST * VERTEX_MERGE_DIST;
 
 impl Polyhedron {
+    fn new(verts: Vec<Vec3>, faces: FaceVec<Vec<usize>>) -> Self {
+        let mut m = Self {
+            verts: index_vec::IndexVec::from_vec(verts),
+            faces: faces
+                .into_iter()
+                .map(|verts| Face {
+                    verts: verts.into_iter().map(VertIdx::new).collect_vec(),
+                })
+                .map(Some)
+                .collect(),
+            edges: HashMap::new(),
+        };
+        m.make_centred();
+        m
+    }
+
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
     /// at `p`, then its index is returned.
     pub fn add_vert(&mut self, p: Vec3) -> VertIdx {
