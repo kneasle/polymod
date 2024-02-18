@@ -681,7 +681,7 @@ impl Polyhedron {
                         .iter()
                         .map(|vert_idx| self.verts[*vert_idx])
                         .collect_vec();
-                    faces_to_render.push((Srgba::WHITE, verts));
+                    faces_to_render.push((DEFAULT_EDGE_COLOR, verts));
                 }
                 // For ow-like faces, render up to two faces per edge
                 FaceRenderStyle::OwLike {
