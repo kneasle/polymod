@@ -465,7 +465,7 @@ impl OwUnit {
         // Derived from folding patterns:
         // - https://owrigami.com/show_diagram.php?diagram=120
         // - https://owrigami.com/show_diagram.php?diagram=135
-        const DEG_120_REDUCTION: f32 = 0.28867513; // 0.5 * tan(30 deg)
+        const DEG_120_REDUCTION: f32 = 0.8660254; // 1.5 * tan(30 deg)
         const DEG_135_REDUCTION: f32 = 0.82842714; // 2 * tan(22.5 deg)
 
         // Reduction factor is a multiple of 1/4 of the paper's height
