@@ -96,17 +96,28 @@ fn main() {
         (
             "Archimedean",
             vec![
+                // Tetrahedral
                 Model::new("Truncated Tetrahedron", Polyhedron::truncated_tetrahedron()),
+                // Cuboctahedral
                 Model::new("Truncated Cube", Polyhedron::truncated_cube()),
                 Model::new("Truncated Octahedron", Polyhedron::truncated_octahedron()),
                 Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
                 Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
+                Model::new(
+                    "Great Rhombicuboctahedron",
+                    Polyhedron::great_rhombicuboctahedron(),
+                ),
+                // Icosahedral
                 Model::new(
                     "Truncated Dodecahedron",
                     Polyhedron::truncated_dodecahedron(),
                 ),
                 Model::new("Truncated Icosahedron", Polyhedron::truncated_icosahedron()),
                 Model::new("Icosidodecahedron", Polyhedron::icosidodecahedron()),
+                Model::new(
+                    "Great Rhombicosidodecahedron",
+                    Polyhedron::great_rhombicosidodecahedron(),
+                ),
             ],
         ),
         (
@@ -346,8 +357,8 @@ impl Default for ModelViewSettings {
             direction: Side::In,
             add_crinkle: false,
 
-            wireframe_edges: false,
-            wireframe_verts: false,
+            wireframe_edges: true,
+            wireframe_verts: true,
         }
     }
 }

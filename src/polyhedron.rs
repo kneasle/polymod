@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 use three_d::{
-    vec3, Angle, CpuMesh, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh,
+    vec3, Angle, CpuMesh, Deg, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh,
     MetricSpace, Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
 };
 
@@ -119,6 +119,21 @@ impl Polyhedron {
         Self::cube().truncate_platonic(TruncationType::Alternation)
     }
 
+    pub fn rhombicuboctahedron() -> Self {
+        let PrismLike {
+            mut poly,
+            bottom_face,
+            top_face,
+        } = Self::prism(8);
+        poly.extend_cupola(bottom_face, true);
+        poly.extend_cupola(top_face, true);
+        poly
+    }
+
+    pub fn great_rhombicuboctahedron() -> Self {
+        Self::cube().rhombicosi_platonic()
+    }
+
     /* Dodecaheral/icosahedral */
 
     pub fn truncated_dodecahedron() -> Self {
@@ -133,18 +148,13 @@ impl Polyhedron {
         Self::dodecahedron().truncate_platonic(TruncationType::Alternation)
     }
 
-    pub fn rhombicuboctahedron() -> Self {
-        let PrismLike {
-            mut poly,
-            bottom_face,
-            top_face,
-        } = Self::prism(8);
-        poly.extend_cupola(bottom_face, true);
-        poly.extend_cupola(top_face, true);
-        poly
+    pub fn great_rhombicosidodecahedron() -> Self {
+        Self::dodecahedron().rhombicosi_platonic()
     }
 
-    /// If `self` is a Platonic solid, return the truncated version of `self`
+    /* Modelling operations */
+
+    /// If `self` is a Platonic solid, return the truncated or alternated version of `self`
     fn truncate_platonic(&self, trunc_type: TruncationType) -> Self {
         // Calculate how far down each edge the new vertices need to be created
         let lerp_factor = match trunc_type {
@@ -213,12 +223,102 @@ impl Polyhedron {
         model.normalize_edge_length();
         model
     }
+
+    /// If `self` is a platonic solid, return the rhombicosi- or great-rhombicosi- version of `self`
+    fn rhombicosi_platonic(&self /* , greatness: Greatness */) -> Self {
+        let (first_face_idx, first_face) = self.faces_enumerated().next().unwrap();
+        let face_order = first_face.order();
+        let dihedral_angle = self.edges()[0].dihedral_angle().unwrap();
+        let angle_between_adjacent_face_normals = Radians::from(Deg(180.0)) - dihedral_angle;
+        // Determine model's scaling factor
+        let new_face_geometry = PolygonGeom::new(face_order * 2);
+        let alpha = angle_between_adjacent_face_normals / 2.0;
+        let new_face_radius = 0.5 / alpha.sin() + new_face_geometry.in_radius / alpha.tan();
+        let existing_face_radius = self.face_centroid(first_face_idx).magnitude();
+        let scaling_factor = new_face_radius / existing_face_radius;
+
+        // Create expanded faces of `self`, recording which vertices fall onto which edges
+        let mut new_verts = VertVec::new();
+        let mut new_faces = FaceVec::new();
+        let mut left_vert_down_edge = HashMap::<(VertIdx, VertIdx), VertIdx>::new();
+        let mut right_vert_down_edge = HashMap::<(VertIdx, VertIdx), VertIdx>::new();
+        for (face_idx, face) in self.faces_enumerated() {
+            // Determine where to place the new face
+            let centroid = self.face_centroid(face_idx);
+            let edge_midpoint = lerp3(self.verts[face.verts[0]], self.verts[face.verts[1]], 0.5);
+            let new_face_centroid = centroid * scaling_factor;
+            let new_y_axis = (edge_midpoint - centroid).normalize();
+            let new_x_axis = centroid.normalize().cross(new_y_axis);
+            // Create vertices for the new face
+            let mut face_verts = Vec::new();
+            for i in 0..face_order * 2 {
+                let (x, y) = new_face_geometry.offset_point(i, 0.5);
+                let pos = new_face_centroid + x * new_x_axis + y * new_y_axis;
+                let new_vert_idx = new_verts.push(pos);
+                face_verts.push(new_vert_idx);
+                // Record this vertex's presence on the new edges
+                let old_vert_idx = i / 2;
+                let old_v0 = face.verts[(old_vert_idx + 0) % face_order];
+                let old_v1 = face.verts[(old_vert_idx + 1) % face_order];
+                let old_v2 = face.verts[(old_vert_idx + 2) % face_order];
+                if i % 2 == 0 {
+                    left_vert_down_edge.insert((old_v1, old_v0), new_vert_idx);
+                } else {
+                    right_vert_down_edge.insert((old_v1, old_v2), new_vert_idx);
+                }
+            }
+            // Create new face
+            new_faces.push(Some(Face { verts: face_verts }));
+        }
+
+        // Add square faces for each current edge
+        for edge in self.edges() {
+            //         + (edge.top_vert)
+            //         |
+            // tl +----|----+ tr
+            //    |    |    |
+            //    |    |    |
+            //    |    |    |
+            // bl +----|----+ br
+            //         |
+            //         + (edge.bottom_vert)
+            let tl = right_vert_down_edge[&(edge.top_vert, edge.bottom_vert)];
+            let tr = left_vert_down_edge[&(edge.top_vert, edge.bottom_vert)];
+            let bl = left_vert_down_edge[&(edge.bottom_vert, edge.top_vert)];
+            let br = right_vert_down_edge[&(edge.bottom_vert, edge.top_vert)];
+            new_faces.push(Some(Face {
+                verts: vec![tl, tr, br, bl],
+            }));
+        }
+        // Add faces for each current vertex
+        for vert_data in self.vert_datas() {
+            let mut new_verts = Vec::new();
+            for (other_vert, _face) in vert_data.clockwise_loop {
+                let edge = &(vert_data.idx, other_vert);
+                new_verts.push(left_vert_down_edge[edge]);
+                new_verts.push(right_vert_down_edge[edge]);
+            }
+            new_faces.push(Some(Face { verts: new_verts }));
+        }
+
+        Self {
+            verts: new_verts,
+            faces: new_faces,
+            edges: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TruncationType {
     Standard,
     Alternation,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Greatness {
+    Great,
+    Lesser,
 }
 
 /// Basic
@@ -1201,6 +1301,10 @@ impl Edge {
         let v1 = polyhedron.verts[self.bottom_vert];
         let v2 = polyhedron.verts[self.top_vert];
         v1.distance(v2)
+    }
+
+    pub fn dihedral_angle(&self) -> Option<Radians> {
+        self.closed.as_ref().map(|c| c.dihedral_angle)
     }
 
     fn add_left_face(
