@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use polyhedron::{FaceRenderStyle, Polyhedron, PrismLike, RenderStyle};
+use polyhedron::{FaceIdx, FaceRenderStyle, Polyhedron, PrismLike, RenderStyle};
 use three_d::*;
 use utils::Side;
 
@@ -167,6 +167,17 @@ fn main() {
                     poly.extend_cupola(bottom_face, true);
                     let tunnel = Polyhedron::cuboctahedron();
                     poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0, &[]);
+                    poly
+                }),
+                Model::new("K_3 / 3Q_3 (S_3)", {
+                    let mut poly = Polyhedron::truncated_octahedron();
+                    // Excavate cupolas (TODO: Do this by symmetry)
+                    let mut inner_face = FaceIdx::new(0);
+                    for face_idx in [0, 2, 4, 6] {
+                        inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
+                    }
+                    // Excavate central octahedron
+                    poly.excavate_antiprism(inner_face);
                     poly
                 }),
                 Model::new("Apanar Deltahedron", {
