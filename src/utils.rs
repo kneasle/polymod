@@ -27,8 +27,7 @@ pub fn ngon_name(n: usize) -> String {
 pub fn normalize_perpendicular_to(v: Vec3, direction: Vec3) -> Vec3 {
     let dist_along_edge_squared = v.project_on(direction).magnitude2();
     let perpendicular_distance = f32::sqrt(1.0 - dist_along_edge_squared);
-    let normalized = v / perpendicular_distance;
-    normalized
+    v / perpendicular_distance
 }
 
 /// Compute the interior angle of a spherical triangles whos side lengths are `a`, `b` and `c`.

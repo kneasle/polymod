@@ -251,7 +251,7 @@ impl Polyhedron {
 
     pub fn cupola(n: usize) -> PrismLike {
         match n {
-            3 | 4 | 5 => Self::cupola_with_top(n),
+            3..=5 => Self::cupola_with_top(n),
             6 | 8 | 10 => Self::cupola_with_top(n / 2),
             _ => panic!("No cupola has a base or top with {n} sides"),
         }
@@ -724,8 +724,8 @@ impl Polyhedron {
         faces_to_render: &mut Vec<(Srgba, Vec<Vec3>)>,
     ) {
         // Geometry calculations
-        let normal = self.normal_from_verts(&verts);
-        let in_directions = self.vertex_in_directions(&verts);
+        let normal = self.normal_from_verts(verts);
+        let in_directions = self.vertex_in_directions(verts);
 
         let verts_and_ins = verts.iter().zip_eq(&in_directions);
         for ((i0, in0), (i1, in1)) in verts_and_ins.circular_tuple_windows() {
@@ -928,8 +928,7 @@ impl Polyhedron {
             // Find an arbitrary edge adjacent to this vert
             let &(a, first_other_vert) = next_vert
                 .keys()
-                .filter(|(i, _)| *i == vert_idx)
-                .next()
+                .find(|(i, _)| *i == vert_idx)
                 .expect("Every vertex should have an adjacent face");
             assert_eq!(a, vert_idx);
             // Loop round this vertex, tracking which edges/faces we go over

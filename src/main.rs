@@ -265,7 +265,7 @@ fn main() {
             x: wl,
             y: 0,
             width: width.max(1) as u32,
-            height: frame_input.viewport.height as u32,
+            height: frame_input.viewport.height,
         };
 
         // Update the 3D view
@@ -437,8 +437,8 @@ impl OwUnit {
         // Derived from folding patterns:
         // - https://owrigami.com/show_diagram.php?diagram=120
         // - https://owrigami.com/show_diagram.php?diagram=135
-        const DEG_120_REDUCTION: f32 = 0.28867513459; // 0.5 * tan(30 deg)
-        const DEG_135_REDUCTION: f32 = 0.82842712474; // 2 * tan(22.5 deg)
+        const DEG_120_REDUCTION: f32 = 0.28867513; // 0.5 * tan(30 deg)
+        const DEG_135_REDUCTION: f32 = 0.82842714; // 2 * tan(22.5 deg)
 
         // Reduction factor is a multiple of 1/4 of the paper's height
         let (reduction_factor, angle) = match self {
@@ -527,7 +527,7 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
                 let only_angle = *angle_breakdown.keys().next().unwrap();
                 format!(" ({})", display_angle(only_angle))
             } else {
-                format!("")
+                String::new()
             };
             ui.colored_label(
                 color,
