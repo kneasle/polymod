@@ -6,7 +6,7 @@ use three_d::{
     Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
 };
 
-use crate::utils::{angle_in_spherical_triangle, normalize_perpendicular_to, Side};
+use crate::utils::{angle_in_spherical_triangle, lerp3, normalize_perpendicular_to, Side};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
@@ -39,55 +39,6 @@ impl Face {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EdgeData {
     color: Option<Srgba>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Edge {
-    pub bottom_vert: VertIdx,
-    pub top_vert: VertIdx,
-    pub color: Option<Srgba>,
-    pub right_face: FaceIdx,
-    pub closed: Option<ClosedEdgeData>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ClosedEdgeData {
-    pub left_face: FaceIdx,
-    pub dihedral_angle: Radians,
-}
-
-impl Edge {
-    fn add_left_face(
-        &mut self,
-        v1: VertIdx,
-        v2: VertIdx,
-        left_face: FaceIdx,
-        polyhedron: &Polyhedron,
-    ) {
-        assert_eq!((v1, v2), (self.top_vert, self.bottom_vert));
-        self.closed = Some(ClosedEdgeData {
-            left_face,
-            dihedral_angle: self.get_dihedral_angle(left_face, polyhedron),
-        });
-    }
-
-    fn get_dihedral_angle(&self, left_face: FaceIdx, polyhedron: &Polyhedron) -> Radians {
-        let direction =
-            (polyhedron.verts[self.top_vert] - polyhedron.verts[self.bottom_vert]).normalize();
-        // Get face normals
-        let left_normal = polyhedron.face_normal(left_face);
-        let right_normal = polyhedron.face_normal(self.right_face);
-        // Get vectors pointing along the faces, perpendicular to this edge
-        let left_tangent = left_normal.cross(direction);
-        let right_tangent = right_normal.cross(-direction);
-        // Use these four vectors to compute the dihedral angle
-        let mut dihedral = left_tangent.angle(right_tangent);
-        let is_concave = left_tangent.dot(right_normal) < 0.0;
-        if is_concave {
-            dihedral = Radians::full_turn() - dihedral;
-        }
-        dihedral
-    }
 }
 
 ////////////
@@ -146,6 +97,26 @@ impl Polyhedron {
 
 /// Archimedean
 impl Polyhedron {
+    pub fn truncated_tetrahedron() -> Self {
+        Self::tetrahedron().truncate_platonic()
+    }
+
+    pub fn truncated_cube() -> Self {
+        Self::cube().truncate_platonic()
+    }
+
+    pub fn truncated_octahedron() -> Self {
+        Self::octahedron().truncate_platonic()
+    }
+
+    pub fn truncated_dodecahedron() -> Self {
+        Self::dodecahedron().truncate_platonic()
+    }
+
+    pub fn truncated_icosahedron() -> Self {
+        Self::icosahedron().truncate_platonic()
+    }
+
     pub fn cuboctahedron() -> Self {
         let PrismLike {
             mut poly,
@@ -166,6 +137,56 @@ impl Polyhedron {
         poly.extend_cupola(bottom_face, true);
         poly.extend_cupola(top_face, true);
         poly
+    }
+
+    /// If `self` is a Platonic solid, return the truncated version of `self`
+    fn truncate_platonic(&self) -> Self {
+        // Geometry calculations
+        let face_order = self.faces().next().unwrap().order();
+        let base_geom = PolygonGeom::new(face_order);
+        let scaled_geom = PolygonGeom::new(face_order * 2);
+        let scale_factor = scaled_geom.in_radius / base_geom.in_radius;
+        let lerp_factor = (1.0 - 1.0 / scale_factor) / 2.0;
+        // `new_vert_on_edge[(a, b)]` is the first vertex on the edge going from `a` to `b`
+        // (therefore, `new_vert_on_edge[(a, b)]` won't be the same as `new_vert_on_edge[(b, a)]`)
+        let mut new_verts = VertVec::<Vec3>::new();
+        let mut new_vert_on_edge = HashMap::<(VertIdx, VertIdx), VertIdx>::new();
+        let mut add_vert = |v1: VertIdx, v2: VertIdx| {
+            let pos = lerp3(self.verts[v1], self.verts[v2], lerp_factor);
+            let new_idx = new_verts.push(pos);
+            new_vert_on_edge.insert((v1, v2), new_idx);
+        };
+        for e in self.edges() {
+            add_vert(e.top_vert, e.bottom_vert);
+            add_vert(e.bottom_vert, e.top_vert);
+        }
+        // Add new faces for the main faces
+        let mut new_faces = FaceVec::<Option<Face>>::new();
+        for f in self.faces() {
+            let mut verts = Vec::new();
+            for (v1, v2) in f.verts.iter().copied().circular_tuple_windows() {
+                verts.push(new_vert_on_edge[&(v1, v2)]);
+                verts.push(new_vert_on_edge[&(v2, v1)]);
+            }
+            new_faces.push(Some(Face { verts }));
+        }
+        // Add faces for the truncated vertices
+        for vert_data in self.vert_datas() {
+            let new_face_verts = vert_data
+                .clockwise_loop
+                .into_iter()
+                .map(|(opposite_vert, _face)| new_vert_on_edge[&(vert_data.idx, opposite_vert)])
+                .collect_vec();
+            new_faces.push(Some(Face {
+                verts: new_face_verts,
+            }));
+        }
+
+        Self {
+            verts: new_verts,
+            faces: new_faces,
+            edges: HashMap::new(),
+        }
     }
 }
 
@@ -885,8 +906,51 @@ impl Polyhedron {
         self.verts.push(p)
     }
 
-    pub fn verts(&self) -> &[Vec3] {
+    pub fn vert_positions(&self) -> &[Vec3] {
         self.verts.as_raw_slice()
+    }
+
+    // TODO: Handle open edges correctly
+    pub fn vert_datas(&self) -> VertVec<VertData> {
+        // If we are at vertex `a` looking down an edge at vertex `b`, then the next edge
+        // *clockwise* around `a` will lead to `c` having gone over face `f` where:
+        // `(c, f) = next_vert[&(a, b)]`.
+        let mut next_vert = HashMap::<(VertIdx, VertIdx), (VertIdx, FaceIdx)>::new();
+        for (face_idx, face) in self.faces_enumerated() {
+            for (c, a, b) in face.verts.iter().copied().circular_tuple_windows() {
+                next_vert.insert((a, b), (c, face_idx));
+            }
+        }
+
+        // Loop round each vertex in turn by following links in `next_vert`
+        let mut datas = VertVec::new();
+        for vert_idx in self.verts.indices() {
+            // Find an arbitrary edge adjacent to this vert
+            let &(a, first_other_vert) = next_vert
+                .keys()
+                .filter(|(i, _)| *i == vert_idx)
+                .next()
+                .expect("Every vertex should have an adjacent face");
+            assert_eq!(a, vert_idx);
+            // Loop round this vertex, tracking which edges/faces we go over
+            let mut other_vert = first_other_vert;
+            let mut clockwise_loop = Vec::new();
+            loop {
+                let (next_other_vert, face_idx) = next_vert[&(vert_idx, other_vert)];
+                clockwise_loop.push((other_vert, face_idx));
+                // Move to the other side of the face, and end if we've fully looped
+                other_vert = next_other_vert;
+                if other_vert == first_other_vert {
+                    break;
+                }
+            }
+            // Add this vertex's loop
+            datas.push(VertData {
+                idx: vert_idx,
+                clockwise_loop,
+            });
+        }
+        datas
     }
 
     pub fn edges(&self) -> Vec<Edge> {
@@ -1025,6 +1089,61 @@ impl Polyhedron {
             total += *v;
         }
         total / self.verts.len() as f32
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VertData {
+    pub idx: VertIdx,
+    pub clockwise_loop: Vec<(VertIdx, FaceIdx)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Edge {
+    pub bottom_vert: VertIdx,
+    pub top_vert: VertIdx,
+    pub color: Option<Srgba>,
+    pub right_face: FaceIdx,
+    pub closed: Option<ClosedEdgeData>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClosedEdgeData {
+    pub left_face: FaceIdx,
+    pub dihedral_angle: Radians,
+}
+
+impl Edge {
+    fn add_left_face(
+        &mut self,
+        v1: VertIdx,
+        v2: VertIdx,
+        left_face: FaceIdx,
+        polyhedron: &Polyhedron,
+    ) {
+        assert_eq!((v1, v2), (self.top_vert, self.bottom_vert));
+        self.closed = Some(ClosedEdgeData {
+            left_face,
+            dihedral_angle: self.get_dihedral_angle(left_face, polyhedron),
+        });
+    }
+
+    fn get_dihedral_angle(&self, left_face: FaceIdx, polyhedron: &Polyhedron) -> Radians {
+        let direction =
+            (polyhedron.verts[self.top_vert] - polyhedron.verts[self.bottom_vert]).normalize();
+        // Get face normals
+        let left_normal = polyhedron.face_normal(left_face);
+        let right_normal = polyhedron.face_normal(self.right_face);
+        // Get vectors pointing along the faces, perpendicular to this edge
+        let left_tangent = left_normal.cross(direction);
+        let right_tangent = right_normal.cross(-direction);
+        // Use these four vectors to compute the dihedral angle
+        let mut dihedral = left_tangent.angle(right_tangent);
+        let is_concave = left_tangent.dot(right_normal) < 0.0;
+        if is_concave {
+            dihedral = Radians::full_turn() - dihedral;
+        }
+        dihedral
     }
 }
 

@@ -42,3 +42,7 @@ pub fn angle_in_spherical_triangle(a: Radians, b: Radians, c: Radians) -> Radian
 pub fn srgba_to_egui_color(c: Srgba) -> egui::Color32 {
     egui::Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a)
 }
+
+pub fn lerp3(a: Vec3, b: Vec3, t: f32) -> Vec3 {
+    a * (1.0 - t) + b * t
+}

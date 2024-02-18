@@ -95,6 +95,14 @@ fn main() {
         (
             "Archimedean",
             vec![
+                Model::new("Truncated Tetrahedron", Polyhedron::truncated_tetrahedron()),
+                Model::new("Truncated Cube", Polyhedron::truncated_cube()),
+                Model::new("Truncated Octahedron", Polyhedron::truncated_octahedron()),
+                // Model::new(
+                //     "Truncated Dodecahedron",
+                //     Polyhedron::truncated_dodecahedron(),
+                // ),
+                Model::new("Truncated Icosahedron", Polyhedron::truncated_icosahedron()),
                 Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
                 Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
             ],
@@ -193,7 +201,7 @@ fn main() {
     let mut model_view_settings = ModelViewSettings::default();
 
     // Create model view
-    let mut current_model = Polyhedron::cuboctahedron();
+    let mut current_model = Polyhedron::truncated_tetrahedron();
     let mut view = model_view::ModelView::new(
         current_model.clone(),
         model_view_settings.as_render_style(),
@@ -316,7 +324,7 @@ pub enum OwUnit {
 impl Default for ModelViewSettings {
     fn default() -> Self {
         ModelViewSettings {
-            style: ModelViewStyle::OwLikeAngled,
+            style: ModelViewStyle::Solid,
             side_ratio: 0.25,
 
             paper_ratio_w: 3,
@@ -548,5 +556,5 @@ fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
 
     // Vertices
     ui.add_space(SMALL_SPACE);
-    ui.strong(format!("{} vertices", polyhedron.verts().len()));
+    ui.strong(format!("{} vertices", polyhedron.vert_positions().len()));
 }
