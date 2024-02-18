@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use itertools::Itertools;
 use three_d::{
     vec3, Angle, CpuMesh, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh,
-    Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
+    MetricSpace, Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
 };
 
 use crate::utils::{angle_in_spherical_triangle, lerp3, normalize_perpendicular_to, Side};
@@ -91,41 +91,46 @@ impl Polyhedron {
     }
 
     pub fn dodecahedron() -> Self {
-        todo!()
+        let mut poly = Self::icosahedron().dual();
+        poly.normalize_edge_length();
+        poly
     }
 }
 
 /// Archimedean
 impl Polyhedron {
+    /* Tetrahedral */
+
     pub fn truncated_tetrahedron() -> Self {
-        Self::tetrahedron().truncate_platonic()
+        Self::tetrahedron().truncate_platonic(TruncationType::Standard)
     }
 
+    /* Cubic/octahedral */
+
     pub fn truncated_cube() -> Self {
-        Self::cube().truncate_platonic()
+        Self::cube().truncate_platonic(TruncationType::Standard)
     }
 
     pub fn truncated_octahedron() -> Self {
-        Self::octahedron().truncate_platonic()
-    }
-
-    pub fn truncated_dodecahedron() -> Self {
-        Self::dodecahedron().truncate_platonic()
-    }
-
-    pub fn truncated_icosahedron() -> Self {
-        Self::icosahedron().truncate_platonic()
+        Self::octahedron().truncate_platonic(TruncationType::Standard)
     }
 
     pub fn cuboctahedron() -> Self {
-        let PrismLike {
-            mut poly,
-            bottom_face,
-            top_face: _,
-        } = Self::cupola(3);
-        poly.extend_cupola(bottom_face, false);
-        poly.make_centred();
-        poly
+        Self::cube().truncate_platonic(TruncationType::Alternation)
+    }
+
+    /* Dodecaheral/icosahedral */
+
+    pub fn truncated_dodecahedron() -> Self {
+        Self::dodecahedron().truncate_platonic(TruncationType::Standard)
+    }
+
+    pub fn truncated_icosahedron() -> Self {
+        Self::icosahedron().truncate_platonic(TruncationType::Standard)
+    }
+
+    pub fn icosidodecahedron() -> Self {
+        Self::dodecahedron().truncate_platonic(TruncationType::Alternation)
     }
 
     pub fn rhombicuboctahedron() -> Self {
@@ -140,13 +145,18 @@ impl Polyhedron {
     }
 
     /// If `self` is a Platonic solid, return the truncated version of `self`
-    fn truncate_platonic(&self) -> Self {
-        // Geometry calculations
-        let face_order = self.faces().next().unwrap().order();
-        let base_geom = PolygonGeom::new(face_order);
-        let scaled_geom = PolygonGeom::new(face_order * 2);
-        let scale_factor = scaled_geom.in_radius / base_geom.in_radius;
-        let lerp_factor = (1.0 - 1.0 / scale_factor) / 2.0;
+    fn truncate_platonic(&self, trunc_type: TruncationType) -> Self {
+        // Calculate how far down each edge the new vertices need to be created
+        let lerp_factor = match trunc_type {
+            TruncationType::Standard => {
+                let face_order = self.faces().next().unwrap().order();
+                let base_geom = PolygonGeom::new(face_order);
+                let scaled_geom = PolygonGeom::new(face_order * 2);
+                let scale_factor = scaled_geom.in_radius / base_geom.in_radius;
+                (1.0 - 1.0 / scale_factor) / 2.0
+            }
+            TruncationType::Alternation => 0.5,
+        };
         // `new_vert_on_edge[(a, b)]` is the first vertex on the edge going from `a` to `b`
         // (therefore, `new_vert_on_edge[(a, b)]` won't be the same as `new_vert_on_edge[(b, a)]`)
         let mut new_verts = VertVec::<Vec3>::new();
@@ -157,16 +167,29 @@ impl Polyhedron {
             new_vert_on_edge.insert((v1, v2), new_idx);
         };
         for e in self.edges() {
-            add_vert(e.top_vert, e.bottom_vert);
-            add_vert(e.bottom_vert, e.top_vert);
+            let (v1, v2) = (e.top_vert, e.bottom_vert);
+            add_vert(v1, v2);
+            if trunc_type == TruncationType::Standard {
+                add_vert(v2, v1);
+            }
         }
+        if trunc_type == TruncationType::Alternation {
+            // For alternations, the same vertex is accessible from each end of the face
+            let existing_edges = new_vert_on_edge.iter().map(|(k, v)| (*k, *v)).collect_vec();
+            for ((v1, v2), new_vert) in existing_edges {
+                new_vert_on_edge.insert((v2, v1), new_vert);
+            }
+        }
+
         // Add new faces for the main faces
         let mut new_faces = FaceVec::<Option<Face>>::new();
         for f in self.faces() {
             let mut verts = Vec::new();
             for (v1, v2) in f.verts.iter().copied().circular_tuple_windows() {
                 verts.push(new_vert_on_edge[&(v1, v2)]);
-                verts.push(new_vert_on_edge[&(v2, v1)]);
+                if trunc_type == TruncationType::Standard {
+                    verts.push(new_vert_on_edge[&(v2, v1)]);
+                }
             }
             new_faces.push(Some(Face { verts }));
         }
@@ -182,12 +205,20 @@ impl Polyhedron {
             }));
         }
 
-        Self {
+        let mut model = Self {
             verts: new_verts,
             faces: new_faces,
             edges: HashMap::new(),
-        }
+        };
+        model.normalize_edge_length();
+        model
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TruncationType {
+    Standard,
+    Alternation,
 }
 
 /// Basic
@@ -522,6 +553,32 @@ impl Polyhedron {
         }
     }
 
+    pub fn dual(&self) -> Self {
+        // Create vertices at the centroids of each of the faces
+        let mut new_verts = VertVec::new();
+        let mut vert_idx_for_current_face = HashMap::<FaceIdx, VertIdx>::new();
+        for (face_idx, _face) in self.faces_enumerated() {
+            let new_vert_idx = new_verts.push(self.face_centroid(face_idx));
+            vert_idx_for_current_face.insert(face_idx, new_vert_idx);
+        }
+        // For each current vert, create a new face who's vertices correspond to current model's faces
+        let mut new_faces = FaceVec::new();
+        for vert_data in self.vert_datas() {
+            let verts = vert_data
+                .clockwise_loop
+                .into_iter()
+                .map(|(_v, face_idx)| vert_idx_for_current_face[&face_idx])
+                .collect_vec();
+            new_faces.push(Some(Face { verts }));
+        }
+        // Construct new polygon
+        Self {
+            verts: new_verts,
+            faces: new_faces,
+            edges: HashMap::new(),
+        }
+    }
+
     /// Perform a given `operation`, and set the colours of any new edges to the given `colour`
     pub fn color_edges_added_by<T>(
         &mut self,
@@ -538,6 +595,24 @@ impl Polyhedron {
         }
 
         result
+    }
+
+    /// Scale `self` so that the mean edge length is `1.0`.  If all edges have the same length,
+    /// then this scales `self` so that _all_ edges have length `1.0`.
+    pub fn normalize_edge_length(&mut self) {
+        // Get average edge length
+        let mut total_length = 0.0;
+        let edges = self.edges();
+        for e in &edges {
+            total_length += e.length(self);
+        }
+        let average_edge_length = total_length / edges.len() as f32;
+        // Scale model accordingly
+        self.scale(1.0 / average_edge_length)
+    }
+
+    pub fn scale(&mut self, factor: f32) {
+        self.transform(Mat4::from_scale(factor))
     }
 
     pub fn translate(&mut self, d: Vec3) {
@@ -1017,6 +1092,15 @@ impl Polyhedron {
         self.faces[face].as_ref().unwrap()
     }
 
+    pub fn face_centroid(&self, face: FaceIdx) -> Vec3 {
+        let verts = &self.get_face(face).verts;
+        let mut total = Vec3::zero();
+        for v in verts {
+            total += self.verts[*v];
+        }
+        total / verts.len() as f32
+    }
+
     pub fn face_order(&self, face: FaceIdx) -> usize {
         self.get_face(face).order()
     }
@@ -1113,6 +1197,12 @@ pub struct ClosedEdgeData {
 }
 
 impl Edge {
+    pub fn length(&self, polyhedron: &Polyhedron) -> f32 {
+        let v1 = polyhedron.verts[self.bottom_vert];
+        let v2 = polyhedron.verts[self.top_vert];
+        v1.distance(v2)
+    }
+
     fn add_left_face(
         &mut self,
         v1: VertIdx,

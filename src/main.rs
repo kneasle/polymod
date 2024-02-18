@@ -65,6 +65,7 @@ fn main() {
                 Model::new("Tetrahedron", Polyhedron::tetrahedron()),
                 Model::new("Cube", Polyhedron::cube()),
                 Model::new("Octahedron", Polyhedron::octahedron()),
+                Model::new("Dodecahedron", Polyhedron::dodecahedron()),
                 Model::new("Icosahedron", Polyhedron::icosahedron()),
             ],
         ),
@@ -98,13 +99,14 @@ fn main() {
                 Model::new("Truncated Tetrahedron", Polyhedron::truncated_tetrahedron()),
                 Model::new("Truncated Cube", Polyhedron::truncated_cube()),
                 Model::new("Truncated Octahedron", Polyhedron::truncated_octahedron()),
-                // Model::new(
-                //     "Truncated Dodecahedron",
-                //     Polyhedron::truncated_dodecahedron(),
-                // ),
-                Model::new("Truncated Icosahedron", Polyhedron::truncated_icosahedron()),
                 Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
                 Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
+                Model::new(
+                    "Truncated Dodecahedron",
+                    Polyhedron::truncated_dodecahedron(),
+                ),
+                Model::new("Truncated Icosahedron", Polyhedron::truncated_icosahedron()),
+                Model::new("Icosidodecahedron", Polyhedron::icosidodecahedron()),
             ],
         ),
         (
