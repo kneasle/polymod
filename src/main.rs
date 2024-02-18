@@ -115,6 +115,10 @@ fn main() {
                 Model::new("Truncated Icosahedron", Polyhedron::truncated_icosahedron()),
                 Model::new("Icosidodecahedron", Polyhedron::icosidodecahedron()),
                 Model::new(
+                    "Rhombicosidodecahedron",
+                    Polyhedron::rhombicosidodecahedron(),
+                ),
+                Model::new(
                     "Great Rhombicosidodecahedron",
                     Polyhedron::great_rhombicosidodecahedron(),
                 ),

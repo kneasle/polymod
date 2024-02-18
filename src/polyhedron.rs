@@ -120,18 +120,11 @@ impl Polyhedron {
     }
 
     pub fn rhombicuboctahedron() -> Self {
-        let PrismLike {
-            mut poly,
-            bottom_face,
-            top_face,
-        } = Self::prism(8);
-        poly.extend_cupola(bottom_face, true);
-        poly.extend_cupola(top_face, true);
-        poly
+        Self::cube().rhombicosi_platonic(Greatness::Lesser)
     }
 
     pub fn great_rhombicuboctahedron() -> Self {
-        Self::cube().rhombicosi_platonic()
+        Self::cube().rhombicosi_platonic(Greatness::Great)
     }
 
     /* Dodecaheral/icosahedral */
@@ -148,8 +141,12 @@ impl Polyhedron {
         Self::dodecahedron().truncate_platonic(TruncationType::Alternation)
     }
 
+    pub fn rhombicosidodecahedron() -> Self {
+        Self::dodecahedron().rhombicosi_platonic(Greatness::Lesser)
+    }
+
     pub fn great_rhombicosidodecahedron() -> Self {
-        Self::dodecahedron().rhombicosi_platonic()
+        Self::dodecahedron().rhombicosi_platonic(Greatness::Great)
     }
 
     /* Modelling operations */
@@ -225,13 +222,17 @@ impl Polyhedron {
     }
 
     /// If `self` is a platonic solid, return the rhombicosi- or great-rhombicosi- version of `self`
-    fn rhombicosi_platonic(&self /* , greatness: Greatness */) -> Self {
+    fn rhombicosi_platonic(&self, greatness: Greatness) -> Self {
         let (first_face_idx, first_face) = self.faces_enumerated().next().unwrap();
         let face_order = first_face.order();
+        let new_face_order = match greatness {
+            Greatness::Lesser => face_order,
+            Greatness::Great => face_order * 2,
+        };
         let dihedral_angle = self.edges()[0].dihedral_angle().unwrap();
         let angle_between_adjacent_face_normals = Radians::from(Deg(180.0)) - dihedral_angle;
         // Determine model's scaling factor
-        let new_face_geometry = PolygonGeom::new(face_order * 2);
+        let new_face_geometry = PolygonGeom::new(new_face_order);
         let alpha = angle_between_adjacent_face_normals / 2.0;
         let new_face_radius = 0.5 / alpha.sin() + new_face_geometry.in_radius / alpha.tan();
         let existing_face_radius = self.face_centroid(first_face_idx).magnitude();
@@ -251,19 +252,23 @@ impl Polyhedron {
             let new_x_axis = centroid.normalize().cross(new_y_axis);
             // Create vertices for the new face
             let mut face_verts = Vec::new();
-            for i in 0..face_order * 2 {
+            for i in 0..new_face_order {
                 let (x, y) = new_face_geometry.offset_point(i, 0.5);
                 let pos = new_face_centroid + x * new_x_axis + y * new_y_axis;
                 let new_vert_idx = new_verts.push(pos);
                 face_verts.push(new_vert_idx);
                 // Record this vertex's presence on the new edges
-                let old_vert_idx = i / 2;
+                let old_vert_idx = match greatness {
+                    Greatness::Lesser => i,
+                    Greatness::Great => i / 2,
+                };
                 let old_v0 = face.verts[(old_vert_idx + 0) % face_order];
                 let old_v1 = face.verts[(old_vert_idx + 1) % face_order];
                 let old_v2 = face.verts[(old_vert_idx + 2) % face_order];
-                if i % 2 == 0 {
+                if greatness == Greatness::Lesser || i % 2 == 0 {
                     left_vert_down_edge.insert((old_v1, old_v0), new_vert_idx);
-                } else {
+                }
+                if greatness == Greatness::Lesser || i % 2 == 1 {
                     right_vert_down_edge.insert((old_v1, old_v2), new_vert_idx);
                 }
             }
@@ -296,7 +301,9 @@ impl Polyhedron {
             for (other_vert, _face) in vert_data.clockwise_loop {
                 let edge = &(vert_data.idx, other_vert);
                 new_verts.push(left_vert_down_edge[edge]);
-                new_verts.push(right_vert_down_edge[edge]);
+                if greatness == Greatness::Great {
+                    new_verts.push(right_vert_down_edge[edge]);
+                }
             }
             new_faces.push(Some(Face { verts: new_verts }));
         }
@@ -317,8 +324,8 @@ enum TruncationType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Greatness {
-    Great,
     Lesser,
+    Great,
 }
 
 /// Basic
