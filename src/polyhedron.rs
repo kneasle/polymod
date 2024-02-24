@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    f32::consts::PI,
+};
 
 use itertools::Itertools;
 use three_d::{
@@ -117,6 +120,16 @@ impl Polyhedron {
 
     pub fn cuboctahedron() -> Self {
         Self::cube().truncate_platonic(TruncationType::Alternation)
+    }
+
+    pub fn snub_cube() -> Self {
+        let t = 1.8392868; // tribonacci constant
+        let alpha = f32::sqrt(2.0 + 4.0 * t - 2.0 * t * t);
+
+        let face_rotation_radians = f32::atan(t);
+        let rotation_as_edges = face_rotation_radians / (2.0 * PI) * 4.0;
+        let new_radius = t / alpha;
+        Self::cube().snub_platonic(new_radius, rotation_as_edges)
     }
 
     pub fn rhombicuboctahedron() -> Self {
@@ -304,6 +317,82 @@ impl Polyhedron {
                 if greatness == Greatness::Great {
                     new_verts.push(right_vert_down_edge[edge]);
                 }
+            }
+            new_faces.push(Some(Face { verts: new_verts }));
+        }
+
+        Self {
+            verts: new_verts,
+            faces: new_faces,
+            edges: HashMap::new(),
+        }
+    }
+
+    /// If `self` is a platonic solid, return the rhombicosi- or great-rhombicosi- version of `self`
+    fn snub_platonic(&self, new_inradius: f32, rotation: f32) -> Self {
+        let first_face = self.faces().next().unwrap();
+        let face_order = first_face.order();
+        // Determine model's scaling factor
+        let face_geometry = PolygonGeom::new(face_order);
+
+        // Create expanded faces of `self`, recording which vertices fall onto which edges
+        let mut new_verts = VertVec::new();
+        let mut new_faces = FaceVec::new();
+        let mut left_vert_down_edge = HashMap::<(VertIdx, VertIdx), VertIdx>::new();
+        let mut right_vert_down_edge = HashMap::<(VertIdx, VertIdx), VertIdx>::new();
+        for (face_idx, face) in self.faces_enumerated() {
+            // Determine where to place the new face
+            let centroid = self.face_centroid(face_idx);
+            let edge_midpoint = lerp3(self.verts[face.verts[0]], self.verts[face.verts[1]], 0.5);
+            let new_face_centroid = centroid.normalize() * new_inradius;
+            let new_y_axis = (edge_midpoint - centroid).normalize();
+            let new_x_axis = centroid.normalize().cross(new_y_axis);
+            // Create vertices for the new face
+            let mut face_verts = Vec::new();
+            for i in 0..face_order {
+                let (x, y) = face_geometry.offset_point(i, rotation);
+                let pos = new_face_centroid + x * new_x_axis + y * new_y_axis;
+                let new_vert_idx = new_verts.push(pos);
+                face_verts.push(new_vert_idx);
+                // Record this vertex's presence on the new edges
+                let old_v0 = face.verts[(i + 0) % face_order];
+                let old_v1 = face.verts[(i + 1) % face_order];
+                let old_v2 = face.verts[(i + 2) % face_order];
+                left_vert_down_edge.insert((old_v1, old_v0), new_vert_idx);
+                right_vert_down_edge.insert((old_v1, old_v2), new_vert_idx);
+            }
+            // Create new face
+            new_faces.push(Some(Face { verts: face_verts }));
+        }
+
+        // Add square faces for each current edge
+        for edge in self.edges() {
+            //         + (edge.top_vert)
+            //         |
+            // tl +----|----+ tr
+            //    | \_ |    |
+            //    |   -|-_  |
+            //    |    |  \ |
+            // bl +----|----+ br
+            //         |
+            //         + (edge.bottom_vert)
+            let tl = right_vert_down_edge[&(edge.top_vert, edge.bottom_vert)];
+            let tr = left_vert_down_edge[&(edge.top_vert, edge.bottom_vert)];
+            let bl = left_vert_down_edge[&(edge.bottom_vert, edge.top_vert)];
+            let br = right_vert_down_edge[&(edge.bottom_vert, edge.top_vert)];
+            new_faces.push(Some(Face {
+                verts: vec![tl, br, bl],
+            }));
+            new_faces.push(Some(Face {
+                verts: vec![tl, tr, br],
+            }));
+        }
+        // Add faces for each current vertex
+        for vert_data in self.vert_datas() {
+            let mut new_verts = Vec::new();
+            for (other_vert, _face) in vert_data.clockwise_loop {
+                let edge = &(vert_data.idx, other_vert);
+                new_verts.push(left_vert_down_edge[edge]);
             }
             new_faces.push(Some(Face { verts: new_verts }));
         }
@@ -1030,7 +1119,6 @@ impl Polyhedron {
 }
 
 fn unit_inset_angle(n: usize, unit_angle: Radians) -> Radians {
-    use std::f32::consts::PI;
     let interior_ngon_angle = Rad(PI - (PI * 2.0 / n as f32));
     let mut angle = angle_in_spherical_triangle(unit_angle, interior_ngon_angle, unit_angle);
     // Correct NaN angles (if the corner is too wide or the unit is level with the face and

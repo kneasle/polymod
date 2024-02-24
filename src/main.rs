@@ -102,6 +102,7 @@ fn main() {
                 Model::new("Truncated Cube", Polyhedron::truncated_cube()),
                 Model::new("Truncated Octahedron", Polyhedron::truncated_octahedron()),
                 Model::new("Cuboctahedron", Polyhedron::cuboctahedron()),
+                Model::new("Snub Cube", Polyhedron::snub_cube()),
                 Model::new("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
                 Model::new(
                     "Great Rhombicuboctahedron",
@@ -229,7 +230,7 @@ fn main() {
     let mut model_view_settings = ModelViewSettings::default();
 
     // Create model view
-    let mut current_model = Polyhedron::truncated_tetrahedron();
+    let mut current_model = Polyhedron::snub_cube();
     let mut view = model_view::ModelView::new(
         current_model.clone(),
         model_view_settings.as_render_style(),
