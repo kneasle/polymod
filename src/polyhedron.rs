@@ -884,7 +884,7 @@ const INSIDE_TINT: f32 = 0.5;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RenderStyle {
-    pub face: FaceRenderStyle,
+    pub face: Option<FaceRenderStyle>,
     pub wireframe_edges: bool,
     pub wireframe_verts: bool,
 }
@@ -924,7 +924,7 @@ pub struct FixedAngle {
 }
 
 pub struct Meshes {
-    pub face_mesh: Mesh,
+    pub face_mesh: Option<Mesh>,
     pub edge_mesh: InstancedMesh,
     pub vertex_mesh: InstancedMesh,
 }
@@ -935,7 +935,7 @@ impl Polyhedron {
         const VERTEX_RADIUS: f32 = 0.05;
 
         // Generate CPU-side mesh data
-        let face_mesh = self.face_mesh(style);
+        let face_mesh = style.face.map(|f| self.face_mesh(f));
         let edges = match style.wireframe_edges {
             true => self.edge_instances(),
             false => Instances::default(),
@@ -957,15 +957,15 @@ impl Polyhedron {
             .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
             .unwrap();
         Meshes {
-            face_mesh: Mesh::new(context, &face_mesh),
+            face_mesh: face_mesh.map(|m| Mesh::new(context, &m)),
             edge_mesh: InstancedMesh::new(context, &edges, &cylinder),
             vertex_mesh: InstancedMesh::new(context, &verts, &sphere),
         }
     }
 
-    fn face_mesh(&self, style: RenderStyle) -> CpuMesh {
+    fn face_mesh(&self, style: FaceRenderStyle) -> CpuMesh {
         // Create outward-facing faces
-        let faces = self.faces_to_render(style.face);
+        let faces = self.faces_to_render(style);
         let (verts, colors, tri_indices) = Self::triangulate_mesh(faces);
 
         // Add verts colors for inside-facing verts

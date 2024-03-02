@@ -342,6 +342,7 @@ pub struct ModelViewSettings {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelViewStyle {
+    None,
     Solid,
     OwLikeFlat,
     OwLikeAngled,
@@ -377,11 +378,12 @@ impl Default for ModelViewSettings {
 impl ModelViewSettings {
     pub fn as_render_style(&self) -> RenderStyle {
         let face = match self.style {
-            ModelViewStyle::Solid => FaceRenderStyle::Solid,
-            ModelViewStyle::OwLikeFlat => FaceRenderStyle::OwLike {
+            ModelViewStyle::None => None,
+            ModelViewStyle::Solid => Some(FaceRenderStyle::Solid),
+            ModelViewStyle::OwLikeFlat => Some(FaceRenderStyle::OwLike {
                 side_ratio: self.side_ratio,
                 fixed_angle: None,
-            },
+            }),
             ModelViewStyle::OwLikeAngled => {
                 // Model the geometry of the unit
                 let paper_aspect = self.paper_ratio_h as f32 / self.paper_ratio_w as f32;
@@ -389,14 +391,14 @@ impl ModelViewSettings {
                 let unit_spine_length = 1.0 - length_reduction * 2.0;
                 let unit_width = paper_aspect / 4.0;
                 // Construct unit info
-                FaceRenderStyle::OwLike {
+                Some(FaceRenderStyle::OwLike {
                     side_ratio: unit_width / unit_spine_length,
                     fixed_angle: Some(polyhedron::FixedAngle {
                         unit_angle,
                         push_direction: self.direction,
                         add_crinkle: self.add_crinkle,
                     }),
-                }
+                })
             }
         };
         RenderStyle {
@@ -408,6 +410,7 @@ impl ModelViewSettings {
 
     pub fn gui(&mut self, ui: &mut egui::Ui) {
         ui.strong("Faces");
+        ui.radio_value(&mut self.style, ModelViewStyle::None, "None");
         ui.radio_value(&mut self.style, ModelViewStyle::Solid, "Solid");
         ui.radio_value(
             &mut self.style,

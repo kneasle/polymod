@@ -89,13 +89,20 @@ impl ModelView {
 
         // Meshes
         let meshes = self.mesh_cache.get(model, style, &self.context);
-        let face_mesh = Gm::new(&meshes.face_mesh, &self.face_material);
-        let edge_mesh = Gm::new(&meshes.edge_mesh, &self.wireframe_material);
-        let vertex_mesh = Gm::new(&meshes.vertex_mesh, &self.wireframe_material);
+        let face_mesh = meshes
+            .face_mesh
+            .as_ref()
+            .map(|face_mesh| Gm::new(face_mesh, &self.face_material));
+        let objects: [&dyn Object; 2] = [
+            &Gm::new(&meshes.edge_mesh, &self.wireframe_material),
+            &Gm::new(&meshes.vertex_mesh, &self.wireframe_material),
+        ];
 
         target.render(
             &self.camera,
-            [&face_mesh as &dyn Object, &vertex_mesh, &edge_mesh],
+            objects
+                .into_iter()
+                .chain(face_mesh.as_ref().map(|o| o as &dyn Object)),
             &lights,
         );
     }
