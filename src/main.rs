@@ -289,18 +289,20 @@ fn main() {
                     SidePanel::right("right-panel")
                         .min_width(250.0)
                         .show(egui_context, |ui| {
-                            ui.heading("View Settings");
-                            model_view_settings.gui(ui);
+                            ScrollArea::vertical().show(ui, |ui| {
+                                ui.heading("View Settings");
+                                model_view_settings.gui(ui);
 
-                            ui.add_space(WIDE_SPACE);
-                            ui.separator();
-                            ui.heading("Model Properties");
-                            model_properties_gui(&current_model, ui);
+                                ui.add_space(WIDE_SPACE);
+                                ui.separator();
+                                ui.heading("Model Properties");
+                                model_properties_gui(&current_model, ui);
 
-                            ui.add_space(WIDE_SPACE);
-                            ui.separator();
-                            ui.heading("Model Geometry");
-                            model_geom_gui(&current_model, &mut show_external_angles, ui);
+                                ui.add_space(WIDE_SPACE);
+                                ui.separator();
+                                ui.heading("Model Geometry");
+                                model_geom_gui(&current_model, &mut show_external_angles, ui);
+                            });
                         });
                 right_panel_width = response.response.rect.width();
             },
