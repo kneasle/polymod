@@ -37,6 +37,38 @@ impl Face {
     pub fn order(&self) -> usize {
         self.verts.len()
     }
+
+    pub fn is_regular(&self, polyhedron: &Polyhedron) -> bool {
+        let expected_angle = Rad::full_turn() / self.order() as f32;
+        for (v1, v2, v3) in self.vert_positions(polyhedron).circular_tuple_windows() {
+            let angle = (v2 - v1).angle(v3 - v2);
+            if f32::abs(angle.0 - expected_angle.0) > 0.0001 {
+                return false; // Incorrect angle => irregular face
+            }
+        }
+        true
+    }
+
+    pub fn is_flat(&self, polyhedron: &Polyhedron) -> bool {
+        let normal = self.normal(polyhedron);
+        for (v1, v2) in self.vert_positions(polyhedron).circular_tuple_windows() {
+            if (v2 - v1).dot(normal) > 0.00001 {
+                return false; // Edge is not perpendicular to normal => aplanar face
+            }
+        }
+        true
+    }
+
+    pub fn normal(&self, polyhedron: &Polyhedron) -> Vec3 {
+        polyhedron.normal_from_verts(&self.verts)
+    }
+
+    pub fn vert_positions<'a>(
+        &'a self,
+        polyhedron: &'a Polyhedron,
+    ) -> impl ExactSizeIterator<Item = Vec3> + 'a + Clone {
+        self.verts.iter().map(|idx| polyhedron.verts[*idx])
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1239,9 +1271,11 @@ impl Polyhedron {
                 if let Some(edge) = edges.get_mut(&key) {
                     edge.add_left_face(v1, v2, face_idx, self);
                 } else {
+                    let direction = self.verts[v2] - self.verts[v1];
                     let edge = Edge {
                         bottom_vert: v1,
                         top_vert: v2,
+                        length: direction.magnitude(),
                         color: self.get_edge_color(v1, v2),
                         right_face: face_idx,
                         closed: None,
@@ -1352,7 +1386,7 @@ impl Polyhedron {
     }
 
     pub fn face_normal(&self, face: FaceIdx) -> Vec3 {
-        self.normal_from_verts(&self.get_face(face).verts)
+        self.faces[face].as_ref().unwrap().normal(self)
     }
 
     pub fn normal_from_verts(&self, verts: &[VertIdx]) -> Vec3 {
@@ -1389,6 +1423,7 @@ pub struct VertData {
 pub struct Edge {
     pub bottom_vert: VertIdx,
     pub top_vert: VertIdx,
+    pub length: f32,
     pub color: Option<Srgba>,
     pub right_face: FaceIdx,
     pub closed: Option<ClosedEdgeData>,

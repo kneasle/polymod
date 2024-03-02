@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use polyhedron::{FaceIdx, FaceRenderStyle, Polyhedron, PrismLike, RenderStyle};
-use three_d::*;
+use three_d::{egui::RichText, *};
 use utils::Side;
 
 use crate::{
@@ -280,8 +280,13 @@ fn main() {
 
                             ui.add_space(WIDE_SPACE);
                             ui.separator();
-                            ui.heading("Model Info");
-                            model_info_gui(&current_model, &mut show_external_angles, ui);
+                            ui.heading("Model Properties");
+                            model_properties_gui(&current_model, ui);
+
+                            ui.add_space(WIDE_SPACE);
+                            ui.separator();
+                            ui.heading("Model Geometry");
+                            model_geom_gui(&current_model, &mut show_external_angles, ui);
                         });
                 right_panel_width = response.response.rect.width();
             },
@@ -492,7 +497,38 @@ impl OwUnit {
     }
 }
 
-fn model_info_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
+fn model_properties_gui(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
+    // Faces
+    let all_flat = polyhedron.faces().all(|f| f.is_flat(polyhedron));
+    let all_regular = polyhedron.faces().all(|f| f.is_regular(polyhedron));
+    ui.strong("Faces");
+    ui.indent("HI", |ui| {
+        property_label(ui, all_flat, "Flat");
+        property_label(ui, all_regular, "Regular");
+    });
+
+    // Edges
+    let edges = polyhedron.edges();
+    let unit_length_edges = match edges.iter().map(|e| e.length).minmax() {
+        itertools::MinMaxResult::MinMax(x, y) => f32::abs(y - x) < 0.0001,
+        _ => true,
+    };
+    ui.add_space(SMALL_SPACE);
+    ui.strong("Edges");
+    ui.indent(0, |ui| {
+        property_label(ui, unit_length_edges, "Uniform length");
+    });
+}
+
+fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
+    let mut text = RichText::new(label);
+    if !value {
+        text = text.strikethrough();
+    }
+    ui.label(text);
+}
+
+fn model_geom_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
     // Faces
     ui.strong(format!("{} faces", polyhedron.faces().count()));
     let faces_by_ngon = polyhedron.faces().into_group_map_by(|f| f.verts().len());
