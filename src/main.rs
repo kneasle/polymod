@@ -129,6 +129,20 @@ fn main() {
         (
             "Toroids",
             vec![
+                Model::new("Flying saucer", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face,
+                    } = Polyhedron::cupola(5);
+                    poly.extend_cupola(bottom_face, true);
+                    poly.transform_verts(|mut v| {
+                        v.y = f32::round(v.y * 2.0) / 2.0;
+                        v
+                    });
+                    poly.excavate_prism(top_face);
+                    poly
+                }),
                 Model::new("Cake pan", {
                     let PrismLike {
                         mut poly,

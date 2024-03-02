@@ -857,8 +857,12 @@ impl Polyhedron {
     }
 
     pub fn transform(&mut self, matrix: Mat4) {
+        self.transform_verts(|v| transform_point(v, matrix))
+    }
+
+    pub fn transform_verts(&mut self, mut f: impl FnMut(Vec3) -> Vec3) {
         for v in &mut self.verts {
-            *v = transform_point(*v, matrix);
+            *v = f(*v);
         }
     }
 
