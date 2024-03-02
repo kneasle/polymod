@@ -154,6 +154,13 @@ impl Polyhedron {
         Self::dodecahedron().truncate_platonic(TruncationType::Alternation)
     }
 
+    pub fn snub_dodecahedron() -> Self {
+        let new_radius = 1.9809159;
+        let rotation_degrees = 13.106403;
+        let rotation_sides = rotation_degrees / 360.0 * 5.0;
+        Self::dodecahedron().snub_platonic(new_radius, 0.5 + rotation_sides)
+    }
+
     pub fn rhombicosidodecahedron() -> Self {
         Self::dodecahedron().rhombicosi_platonic(Greatness::Lesser)
     }
@@ -275,6 +282,7 @@ impl Polyhedron {
                     Greatness::Lesser => i,
                     Greatness::Great => i / 2,
                 };
+                #[allow(clippy::identity_op)]
                 let old_v0 = face.verts[(old_vert_idx + 0) % face_order];
                 let old_v1 = face.verts[(old_vert_idx + 1) % face_order];
                 let old_v2 = face.verts[(old_vert_idx + 2) % face_order];
@@ -355,6 +363,7 @@ impl Polyhedron {
                 let new_vert_idx = new_verts.push(pos);
                 face_verts.push(new_vert_idx);
                 // Record this vertex's presence on the new edges
+                #[allow(clippy::identity_op)]
                 let old_v0 = face.verts[(i + 0) % face_order];
                 let old_v1 = face.verts[(i + 1) % face_order];
                 let old_v2 = face.verts[(i + 2) % face_order];
