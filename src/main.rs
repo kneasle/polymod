@@ -70,30 +70,6 @@ fn main() {
             ],
         ),
         (
-            "Basic",
-            vec![
-                Model::new("3-Pyramid = Tetrahedron", Polyhedron::pyramid(3).poly),
-                Model::new("4-Pyramid", Polyhedron::pyramid(4).poly),
-                Model::new("5-Pyramid", Polyhedron::pyramid(5).poly),
-                Model::new("3-Cupola", Polyhedron::cupola(3).poly),
-                Model::new("4-Cupola", Polyhedron::cupola(4).poly),
-                Model::new("5-Cupola", Polyhedron::cupola(5).poly),
-            ],
-        ),
-        (
-            "Prisms & Antiprisms",
-            vec![
-                Model::new("3-Prism", Polyhedron::prism(3).poly),
-                Model::new("4-Prism = Cube", Polyhedron::prism(4).poly),
-                Model::new("5-Prism", Polyhedron::prism(5).poly),
-                Model::new("6-Prism", Polyhedron::prism(6).poly),
-                Model::new("3-Antiprism = Octahedron", Polyhedron::antiprism(3).poly),
-                Model::new("4-Antiprism", Polyhedron::antiprism(4).poly),
-                Model::new("5-Antiprism", Polyhedron::antiprism(5).poly),
-                Model::new("6-Antiprism", Polyhedron::antiprism(6).poly),
-            ],
-        ),
-        (
             "Archimedean",
             vec![
                 // Tetrahedral
@@ -124,6 +100,30 @@ fn main() {
                     "Great Rhombicosidodecahedron",
                     Polyhedron::great_rhombicosidodecahedron(),
                 ),
+            ],
+        ),
+        (
+            "Pyramids & Cupolas",
+            vec![
+                Model::new("3-Pyramid = Tetrahedron", Polyhedron::pyramid(3).poly),
+                Model::new("4-Pyramid", Polyhedron::pyramid(4).poly),
+                Model::new("5-Pyramid", Polyhedron::pyramid(5).poly),
+                Model::new("3-Cupola", Polyhedron::cupola(3).poly),
+                Model::new("4-Cupola", Polyhedron::cupola(4).poly),
+                Model::new("5-Cupola", Polyhedron::cupola(5).poly),
+            ],
+        ),
+        (
+            "Prisms & Antiprisms",
+            vec![
+                Model::new("3-Prism", Polyhedron::prism(3).poly),
+                Model::new("4-Prism = Cube", Polyhedron::prism(4).poly),
+                Model::new("5-Prism", Polyhedron::prism(5).poly),
+                Model::new("6-Prism", Polyhedron::prism(6).poly),
+                Model::new("3-Antiprism = Octahedron", Polyhedron::antiprism(3).poly),
+                Model::new("4-Antiprism", Polyhedron::antiprism(4).poly),
+                Model::new("5-Antiprism", Polyhedron::antiprism(5).poly),
+                Model::new("6-Antiprism", Polyhedron::antiprism(6).poly),
             ],
         ),
         (
