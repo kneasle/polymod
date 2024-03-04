@@ -2,36 +2,23 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use polyhedron::{FaceIdx, FaceRenderStyle, Polyhedron, PrismLike, RenderStyle};
+use polyhedron::{FaceIdx, Polyhedron, PrismLike};
 use three_d::{egui::RichText, *};
-use utils::Side;
 
 use crate::{
     polyhedron::{ClosedEdgeData, Edge},
     utils::ngon_name,
 };
 
+use model::Model;
+
+mod model;
 mod model_view;
 mod polyhedron;
 mod utils;
 
 const WIDE_SPACE: f32 = 20.0;
 const SMALL_SPACE: f32 = 10.0;
-
-#[derive(Debug)]
-struct Model {
-    name: String,
-    poly: Polyhedron,
-}
-
-impl Model {
-    pub fn new(name: &str, poly: Polyhedron) -> Self {
-        Self {
-            name: name.to_owned(),
-            poly,
-        }
-    }
-}
 
 fn main() {
     // Create window
@@ -58,7 +45,7 @@ fn main() {
     };
 
     // Base models
-    let model_groups = [
+    let mut model_groups = [
         (
             "Platonic",
             vec![
@@ -224,7 +211,7 @@ fn main() {
                         .map(|(idx, _face)| idx)
                         .collect_vec();
                     // Dig tunnel
-                    poly.color_edges_added_by(Srgba::BLUE, |poly| {
+                    let edges_to_color = poly.get_edges_added_by(|poly| {
                         poly.excavate_antiprism(bottom_face);
                         poly.excavate_antiprism(top_face);
                     });
@@ -242,16 +229,16 @@ fn main() {
 
     // GUI variables
     let mut show_external_angles = false;
-    let mut model_view_settings = ModelViewSettings::default();
 
     // Create model view
-    let mut current_model = Polyhedron::snub_cube();
-    let mut view = model_view::ModelView::new(
-        current_model.clone(),
-        model_view_settings.as_render_style(),
-        &context,
-        window.viewport(),
-    );
+    let mut current_group_idx = 0;
+    let mut current_model_idx = 4;
+    macro_rules! current_model {
+        () => {
+            model_groups[current_group_idx].1[current_model_idx]
+        };
+    }
+    let mut view = model_view::ModelView::new(&context, window.viewport());
 
     // Main loop
     let mut gui = three_d::GUI::new(&context);
@@ -272,11 +259,14 @@ fn main() {
                         .min_width(200.0)
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
-                                for (group_name, models) in &model_groups {
+                                for (group_idx, (group_name, models)) in
+                                    model_groups.iter().enumerate()
+                                {
                                     ui.heading(*group_name);
-                                    for model in models {
+                                    for (model_idx, model) in models.iter().enumerate() {
                                         if ui.button(&model.name).clicked() {
-                                            current_model = model.poly.clone();
+                                            current_group_idx = group_idx;
+                                            current_model_idx = model_idx;
                                         }
                                     }
                                     ui.add_space(WIDE_SPACE);
@@ -290,18 +280,20 @@ fn main() {
                         .min_width(250.0)
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
+                                let current_model = &mut current_model!();
+
                                 ui.heading("View Settings");
-                                model_view_settings.gui(ui);
+                                current_model.draw_view_gui(ui);
 
                                 ui.add_space(WIDE_SPACE);
                                 ui.separator();
                                 ui.heading("Model Properties");
-                                model_properties_gui(&current_model, ui);
+                                model_properties_gui(&current_model.poly, ui);
 
                                 ui.add_space(WIDE_SPACE);
                                 ui.separator();
                                 ui.heading("Model Geometry");
-                                model_geom_gui(&current_model, &mut show_external_angles, ui);
+                                model_geom_gui(current_model, &mut show_external_angles, ui);
                             });
                         });
                 right_panel_width = response.response.rect.width();
@@ -324,11 +316,7 @@ fn main() {
         if redraw {
             let screen = frame_input.screen();
             screen.clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0));
-            view.render(
-                &current_model,
-                model_view_settings.as_render_style(),
-                &screen,
-            );
+            view.render(&current_model!(), &screen);
             screen.write(|| gui.render());
         }
 
@@ -338,182 +326,6 @@ fn main() {
             ..Default::default()
         }
     });
-}
-
-#[derive(Debug, Clone)]
-pub struct ModelViewSettings {
-    pub style: ModelViewStyle,
-    // Flat ow-like unit
-    pub side_ratio: f32,
-    // Ow-like unit
-    pub paper_ratio_w: usize,
-    pub paper_ratio_h: usize,
-    pub unit: OwUnit,
-    pub direction: Side,
-    pub add_crinkle: bool,
-    // Wireframe
-    pub wireframe_edges: bool,
-    pub wireframe_verts: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ModelViewStyle {
-    None,
-    Solid,
-    OwLikeFlat,
-    OwLikeAngled,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OwUnit {
-    Deg60,
-    SturdyEdgeModule90,
-    CustomDeg90,
-    Deg120,
-    Deg135,
-}
-
-impl Default for ModelViewSettings {
-    fn default() -> Self {
-        ModelViewSettings {
-            style: ModelViewStyle::Solid,
-            side_ratio: 0.25,
-
-            paper_ratio_w: 3,
-            paper_ratio_h: 2,
-            unit: OwUnit::CustomDeg90,
-            direction: Side::In,
-            add_crinkle: false,
-
-            wireframe_edges: true,
-            wireframe_verts: true,
-        }
-    }
-}
-
-impl ModelViewSettings {
-    pub fn as_render_style(&self) -> RenderStyle {
-        let face = match self.style {
-            ModelViewStyle::None => None,
-            ModelViewStyle::Solid => Some(FaceRenderStyle::Solid),
-            ModelViewStyle::OwLikeFlat => Some(FaceRenderStyle::OwLike {
-                side_ratio: self.side_ratio,
-                fixed_angle: None,
-            }),
-            ModelViewStyle::OwLikeAngled => {
-                // Model the geometry of the unit
-                let paper_aspect = self.paper_ratio_h as f32 / self.paper_ratio_w as f32;
-                let (length_reduction, unit_angle) = self.unit.geometry(paper_aspect);
-                let unit_spine_length = 1.0 - length_reduction * 2.0;
-                let unit_width = paper_aspect / 4.0;
-                // Construct unit info
-                Some(FaceRenderStyle::OwLike {
-                    side_ratio: unit_width / unit_spine_length,
-                    fixed_angle: Some(polyhedron::FixedAngle {
-                        unit_angle,
-                        push_direction: self.direction,
-                        add_crinkle: self.add_crinkle,
-                    }),
-                })
-            }
-        };
-        RenderStyle {
-            face,
-            wireframe_edges: self.wireframe_edges,
-            wireframe_verts: self.wireframe_verts,
-        }
-    }
-
-    pub fn gui(&mut self, ui: &mut egui::Ui) {
-        ui.strong("Faces");
-        ui.radio_value(&mut self.style, ModelViewStyle::None, "None");
-        ui.radio_value(&mut self.style, ModelViewStyle::Solid, "Solid");
-        ui.radio_value(
-            &mut self.style,
-            ModelViewStyle::OwLikeFlat,
-            "Ow-like edge unit (flat)",
-        );
-        ui.indent("ow-like-flat", |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Side ratio: ");
-                ui.add(egui::Slider::new(&mut self.side_ratio, 0.0..=1.0).step_by(0.05));
-            });
-        });
-        ui.radio_value(
-            &mut self.style,
-            ModelViewStyle::OwLikeAngled,
-            "Ow-like edge unit",
-        );
-        ui.indent("ow-like-angled", |ui| {
-            egui::ComboBox::new("ow-unit", "")
-                .selected_text(self.unit.name())
-                .show_ui(ui, |ui| {
-                    for unit in OwUnit::ALL {
-                        ui.selectable_value(&mut self.unit, unit, unit.name());
-                    }
-                });
-            ui.horizontal(|ui| {
-                ui.label("Folded from");
-                ui.add(egui::DragValue::new(&mut self.paper_ratio_w));
-                ui.label(":");
-                ui.add(egui::DragValue::new(&mut self.paper_ratio_h));
-                ui.label("paper.");
-            });
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.direction, Side::In, "Push in");
-                ui.selectable_value(&mut self.direction, Side::Out, "Push out");
-            });
-            ui.checkbox(&mut self.add_crinkle, "Crinkle");
-        });
-
-        ui.add_space(SMALL_SPACE);
-        ui.strong("Wireframe");
-        ui.checkbox(&mut self.wireframe_edges, "Edges");
-        ui.checkbox(&mut self.wireframe_verts, "Vertices");
-    }
-}
-
-impl OwUnit {
-    const ALL: [Self; 5] = [
-        OwUnit::Deg60,
-        OwUnit::SturdyEdgeModule90,
-        OwUnit::CustomDeg90,
-        OwUnit::Deg120,
-        OwUnit::Deg135,
-    ];
-
-    /// If this `unit` is folded from paper with an aspect ratio of `paper_aspect`, what is the
-    /// `(width reduction, unit angle)` of this unit
-    ///
-    /// Note: the length perpendicular to the model's edge is `paper_aspect` times that of the length
-    /// parallel to the model's edge.
-    pub fn geometry(self, paper_aspect: f32) -> (f32, Degrees) {
-        // Derived from folding patterns:
-        // - https://owrigami.com/show_diagram.php?diagram=120
-        // - https://owrigami.com/show_diagram.php?diagram=135
-        const DEG_120_REDUCTION: f32 = 0.8660254; // 1.5 * tan(30 deg)
-        const DEG_135_REDUCTION: f32 = 0.82842714; // 2 * tan(22.5 deg)
-
-        // Reduction factor is a multiple of 1/4 of the paper's height
-        let (reduction_factor, angle) = match self {
-            OwUnit::Deg60 => (0.0, Deg(60.0)),
-            OwUnit::SturdyEdgeModule90 => (0.5, Deg(90.0)),
-            OwUnit::CustomDeg90 => (1.0, Deg(90.0)),
-            OwUnit::Deg120 => (DEG_120_REDUCTION, Deg(120.0)),
-            OwUnit::Deg135 => (DEG_135_REDUCTION, Deg(135.0)),
-        };
-        (paper_aspect * 0.25 * reduction_factor, angle / 2.0)
-    }
-
-    fn name(&self) -> &'static str {
-        match self {
-            OwUnit::Deg60 => "Ow's 60° unit",
-            OwUnit::SturdyEdgeModule90 => "StEM (90°)",
-            OwUnit::CustomDeg90 => "Custom 90° unit",
-            OwUnit::Deg120 => "Ow's 120° unit",
-            OwUnit::Deg135 => "Ow's 135° unit",
-        }
-    }
 }
 
 fn model_properties_gui(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
@@ -547,10 +359,11 @@ fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
     ui.label(text);
 }
 
-fn model_geom_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
+// TODO: Make this a method
+fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui::Ui) {
     // Faces
-    ui.strong(format!("{} faces", polyhedron.faces().count()));
-    let faces_by_ngon = polyhedron.faces().into_group_map_by(|f| f.verts().len());
+    ui.strong(format!("{} faces", model.poly.faces().count()));
+    let faces_by_ngon = model.poly.faces().into_group_map_by(|f| f.verts().len());
     ui.indent("faces", |ui| {
         for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
             let count = faces.len();
@@ -565,7 +378,7 @@ fn model_geom_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
 
     // Edges
     ui.add_space(SMALL_SPACE);
-    let edges = polyhedron.edges();
+    let edges = model.poly.edges();
     let mut num_open_edges = 0;
     let mut edge_types =
         BTreeMap::<(usize, usize, Srgba), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
@@ -575,12 +388,12 @@ fn model_geom_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
                 left_face,
                 dihedral_angle,
             }) => {
-                let left_n = polyhedron.face_order(left_face);
-                let right_n = polyhedron.face_order(edge.right_face);
+                let left_n = model.poly.face_order(left_face);
+                let right_n = model.poly.face_order(edge.right_face);
                 let mut dihedral = Degrees::from(dihedral_angle).0;
                 dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
                                                                // Record this new edge
-                let col = edge.color.unwrap_or(polyhedron::DEFAULT_EDGE_COLOR);
+                let col = model.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let edge_list: &mut Vec<&Edge> = edge_types
                     .entry((left_n.min(right_n), left_n.max(right_n), col))
                     .or_default()
@@ -641,5 +454,5 @@ fn model_geom_gui(polyhedron: &Polyhedron, show_external_angles: &mut bool, ui: 
 
     // Vertices
     ui.add_space(SMALL_SPACE);
-    ui.strong(format!("{} vertices", polyhedron.vert_positions().len()));
+    ui.strong(format!("{} vertices", model.poly.vert_positions().len()));
 }

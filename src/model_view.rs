@@ -1,11 +1,10 @@
-use three_d::*;
+use std::ops::Deref;
 
-use crate::polyhedron::{Polyhedron, RenderStyle};
+use three_d::*;
 
 /// The 3D viewport used to display a model
 pub(crate) struct ModelView {
     context: Context,
-    mesh_cache: cache::MeshCache,
 
     camera: Camera,
     control: OrbitControl,
@@ -15,12 +14,7 @@ pub(crate) struct ModelView {
 }
 
 impl ModelView {
-    pub fn new(
-        model: Polyhedron,
-        style: RenderStyle,
-        context: &Context,
-        viewport: Viewport,
-    ) -> Self {
+    pub fn new(context: &Context, viewport: Viewport) -> Self {
         // Camera
         let target = vec3(0.0f32, 0.0, 0.0);
         let scene_radius = 6.0f32;
@@ -59,7 +53,6 @@ impl ModelView {
 
         Self {
             context: context.clone(),
-            mesh_cache: cache::MeshCache::new(model, style, context),
 
             camera,
             control,
@@ -78,7 +71,7 @@ impl ModelView {
         redraw
     }
 
-    pub fn render(&mut self, model: &Polyhedron, style: RenderStyle, target: &RenderTarget) {
+    pub fn render(&mut self, model: &crate::Model, target: &RenderTarget) {
         // Lights
         let ambient = AmbientLight::new(&self.context, 0.7, Srgba::WHITE);
         let directional0 =
@@ -88,59 +81,21 @@ impl ModelView {
         let lights = [&ambient as &dyn Light, &directional0, &directional1];
 
         // Meshes
-        let meshes = self.mesh_cache.get(model, style, &self.context);
-        let face_mesh = meshes
-            .face_mesh
-            .as_ref()
-            .map(|face_mesh| Gm::new(face_mesh, &self.face_material));
-        let objects: [&dyn Object; 2] = [
-            &Gm::new(&meshes.edge_mesh, &self.wireframe_material),
-            &Gm::new(&meshes.vertex_mesh, &self.wireframe_material),
-        ];
-
-        target.render(
-            &self.camera,
-            objects
-                .into_iter()
-                .chain(face_mesh.as_ref().map(|o| o as &dyn Object)),
-            &lights,
-        );
-    }
-}
-
-mod cache {
-    use crate::polyhedron::{Meshes, Polyhedron, RenderStyle};
-    use three_d::*;
-
-    /// Caches the [`Mesh`]es for the model rendered in the last frame.  This means if the same
-    /// model is rendered in consecutive frames then we can avoid resending the mesh data to the
-    /// GPU.
-    pub(super) struct MeshCache {
-        model: Polyhedron,
-        style: RenderStyle,
-        meshes: Meshes,
-    }
-
-    impl MeshCache {
-        pub(super) fn new(model: Polyhedron, style: RenderStyle, context: &Context) -> Self {
-            Self {
-                meshes: model.meshes(style, context),
-                model,
-                style,
-            }
+        // TODO: Add some caching to not send these to the GPU every frame
+        let mut meshes: Vec<Box<dyn Object>> = Vec::new();
+        if let Some(cpu_mesh) = model.face_mesh() {
+            let mesh = Mesh::new(&self.context, &cpu_mesh);
+            meshes.push(Box::new(Gm::new(mesh, &self.face_material)));
         }
+        meshes.push(Box::new(Gm::new(
+            model.edge_mesh(&self.context),
+            &self.wireframe_material,
+        )));
+        meshes.push(Box::new(Gm::new(
+            model.vertex_mesh(&self.context),
+            &self.wireframe_material,
+        )));
 
-        pub(super) fn get<'s>(
-            &'s mut self,
-            model: &Polyhedron,
-            style: RenderStyle,
-            context: &Context,
-        ) -> &'s Meshes {
-            let has_changed = (&self.model, self.style) != (model, style);
-            if has_changed {
-                *self = Self::new(model.clone(), style, context);
-            }
-            &self.meshes
-        }
+        target.render(&self.camera, meshes.iter().map(Deref::deref), &lights);
     }
 }

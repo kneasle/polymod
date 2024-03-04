@@ -5,11 +5,11 @@ use std::{
 
 use itertools::Itertools;
 use three_d::{
-    vec3, Angle, CpuMesh, Deg, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4, Mesh,
-    MetricSpace, Positions, Quat, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4, Zero,
+    vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4,
+    Zero,
 };
 
-use crate::utils::{angle_in_spherical_triangle, lerp3, normalize_perpendicular_to, Side};
+use crate::utils::{lerp3, Side};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +17,6 @@ pub struct Polyhedron {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Option<Face>>,
-    edges: HashMap<(VertIdx, VertIdx), EdgeData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +39,11 @@ impl Face {
 
     pub fn is_regular(&self, polyhedron: &Polyhedron) -> bool {
         let expected_angle = Rad::full_turn() / self.order() as f32;
-        for (v1, v2, v3) in self.vert_positions(polyhedron).circular_tuple_windows() {
+        for (v1, v2, v3) in self
+            .vert_positions(polyhedron)
+            .iter()
+            .circular_tuple_windows()
+        {
             let angle = (v2 - v1).angle(v3 - v2);
             if f32::abs(angle.0 - expected_angle.0) > 0.0001 {
                 return false; // Incorrect angle => irregular face
@@ -51,7 +54,11 @@ impl Face {
 
     pub fn is_flat(&self, polyhedron: &Polyhedron) -> bool {
         let normal = self.normal(polyhedron);
-        for (v1, v2) in self.vert_positions(polyhedron).circular_tuple_windows() {
+        for (v1, v2) in self
+            .vert_positions(polyhedron)
+            .iter()
+            .circular_tuple_windows()
+        {
             if (v2 - v1).dot(normal) > 0.00001 {
                 return false; // Edge is not perpendicular to normal => aplanar face
             }
@@ -63,11 +70,11 @@ impl Face {
         polyhedron.normal_from_verts(&self.verts)
     }
 
-    pub fn vert_positions<'a>(
-        &'a self,
-        polyhedron: &'a Polyhedron,
-    ) -> impl ExactSizeIterator<Item = Vec3> + 'a + Clone {
-        self.verts.iter().map(|idx| polyhedron.verts[*idx])
+    pub fn vert_positions(&self, polyhedron: &Polyhedron) -> Vec<Vec3> {
+        self.verts
+            .iter()
+            .map(|idx| polyhedron.verts[*idx])
+            .collect_vec()
     }
 }
 
@@ -267,7 +274,6 @@ impl Polyhedron {
         let mut model = Self {
             verts: new_verts,
             faces: new_faces,
-            edges: HashMap::new(),
         };
         model.normalize_edge_length();
         model
@@ -364,7 +370,6 @@ impl Polyhedron {
         Self {
             verts: new_verts,
             faces: new_faces,
-            edges: HashMap::new(),
         }
     }
 
@@ -441,7 +446,6 @@ impl Polyhedron {
         Self {
             verts: new_verts,
             faces: new_faces,
-            edges: HashMap::new(),
         }
     }
 }
@@ -812,26 +816,25 @@ impl Polyhedron {
         Self {
             verts: new_verts,
             faces: new_faces,
-            edges: HashMap::new(),
         }
     }
 
     /// Perform a given `operation`, and set the colours of any new edges to the given `colour`
-    pub fn color_edges_added_by<T>(
+    pub fn get_edges_added_by<T>(
         &mut self,
-        color: Srgba,
         operation: impl FnOnce(&mut Self) -> T,
-    ) -> T {
+    ) -> (Vec<(VertIdx, VertIdx)>, T) {
         let first_new_vert_idx = self.verts.len_idx();
         let result = operation(self);
         // Colour any edges which contain one or more new vertex
+        let mut edges_added = Vec::new();
         for e in self.edges() {
             if e.top_vert >= first_new_vert_idx || e.bottom_vert >= first_new_vert_idx {
-                self.set_edge_color(e.bottom_vert, e.top_vert, color);
+                edges_added.push((e.bottom_vert, e.top_vert));
             }
         }
 
-        result
+        (edges_added, result)
     }
 
     /// Scale `self` so that the mean edge length is `1.0`.  If all edges have the same length,
@@ -878,312 +881,6 @@ fn normalize_face(verts: &[VertIdx]) -> Vec<VertIdx> {
     verts
 }
 
-///////////////
-// RENDERING //
-///////////////
-
-pub const DEFAULT_EDGE_COLOR: Srgba = Srgba::new_opaque(100, 100, 100);
-const DEFAULT_WIREFRAME_COLOR: Srgba = Srgba::new_opaque(50, 50, 50);
-const INSIDE_TINT: f32 = 0.5;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RenderStyle {
-    pub face: Option<FaceRenderStyle>,
-    pub wireframe_edges: bool,
-    pub wireframe_verts: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FaceRenderStyle {
-    /// Render model with solid faces and a wireframe
-    Solid,
-    /// Render model as ow-like origami, where each edge appears to be made from a paper module.
-    /// The modules look like:
-    /// ```
-    ///    +--------------------------------------------+       ---+
-    ///   /                                              \         |
-    ///  /                                                \        | `side_ratio`
-    /// +--------------------------------------------------+    ---+
-    ///  \                                                / <-- internal angle = `fixed_angle`
-    ///   \                                              /
-    ///    +--------------------------------------------+
-    /// |                                                  |
-    /// |                                                  |
-    /// +--------------------------------------------------+
-    ///         edge length (should always be `1.0`)
-    /// ```
-    OwLike {
-        /// The ratio of sides of the module.  If the edge length of the model is 1, then each
-        /// side of the module is `side_ratio`
-        side_ratio: f32,
-        fixed_angle: Option<FixedAngle>,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FixedAngle {
-    pub unit_angle: Degrees,
-    pub push_direction: Side,
-    pub add_crinkle: bool,
-}
-
-pub struct Meshes {
-    pub face_mesh: Option<Mesh>,
-    pub edge_mesh: InstancedMesh,
-    pub vertex_mesh: InstancedMesh,
-}
-
-impl Polyhedron {
-    pub fn meshes(&self, style: RenderStyle, context: &three_d::Context) -> Meshes {
-        const EDGE_RADIUS: f32 = 0.03;
-        const VERTEX_RADIUS: f32 = 0.05;
-
-        // Generate CPU-side mesh data
-        let face_mesh = style.face.map(|f| self.face_mesh(f));
-        let edges = match style.wireframe_edges {
-            true => self.edge_instances(),
-            false => Instances::default(),
-        };
-        let verts = match style.wireframe_verts || style.wireframe_edges {
-            true => self.vertex_instances(),
-            false => Instances::default(),
-        };
-        let vert_radius = match style.wireframe_verts {
-            true => VERTEX_RADIUS,
-            false => EDGE_RADIUS,
-        };
-
-        // Send mesh data to the GPU and set up instancing
-        let mut sphere = CpuMesh::sphere(8);
-        sphere.transform(&Mat4::from_scale(vert_radius)).unwrap();
-        let mut cylinder = CpuMesh::cylinder(10);
-        cylinder
-            .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
-            .unwrap();
-        Meshes {
-            face_mesh: face_mesh.map(|m| Mesh::new(context, &m)),
-            edge_mesh: InstancedMesh::new(context, &edges, &cylinder),
-            vertex_mesh: InstancedMesh::new(context, &verts, &sphere),
-        }
-    }
-
-    fn face_mesh(&self, style: FaceRenderStyle) -> CpuMesh {
-        // Create outward-facing faces
-        let faces = self.faces_to_render(style);
-        let (verts, colors, tri_indices) = Self::triangulate_mesh(faces);
-
-        // Add verts colors for inside-facing verts
-        let mut all_verts = verts.clone();
-        all_verts.extend_from_within(..);
-        let mut all_colors = colors.clone();
-        for c in colors {
-            let darken = |c: u8| -> u8 { (c as f32 * INSIDE_TINT) as u8 };
-            all_colors.push(Srgba {
-                r: darken(c.r),
-                g: darken(c.g),
-                b: darken(c.b),
-                a: c.a,
-            });
-        }
-        // Add inside-facing faces
-        let vert_offset = verts.len() as u32;
-        let mut all_tri_indices = tri_indices.clone();
-        for vs in tri_indices.chunks_exact(3) {
-            all_tri_indices.extend_from_slice(&[
-                vert_offset + vs[0],
-                vert_offset + vs[2],
-                vert_offset + vs[1],
-            ]);
-        }
-
-        let mut mesh = CpuMesh {
-            positions: Positions::F32(all_verts),
-            colors: Some(all_colors),
-            indices: Indices::U32(all_tri_indices),
-            ..Default::default()
-        };
-        mesh.compute_normals();
-        mesh
-    }
-
-    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(Srgba, Vec<Vec3>)> {
-        let mut faces_to_render = Vec::new();
-        for face in self.faces() {
-            // Decide how to render them, according to the style
-            match style {
-                // For solid faces, just render the face as-is
-                FaceRenderStyle::Solid => {
-                    let verts = face
-                        .verts
-                        .iter()
-                        .map(|vert_idx| self.verts[*vert_idx])
-                        .collect_vec();
-                    faces_to_render.push((DEFAULT_EDGE_COLOR, verts));
-                }
-                // For ow-like faces, render up to two faces per edge
-                FaceRenderStyle::OwLike {
-                    side_ratio,
-                    fixed_angle,
-                } => {
-                    self.owlike_faces(&face.verts, side_ratio, fixed_angle, &mut faces_to_render);
-                }
-            }
-        }
-        faces_to_render
-    }
-
-    fn owlike_faces(
-        &self,
-        verts: &[VertIdx],
-        side_ratio: f32,
-        fixed_angle: Option<FixedAngle>,
-        faces_to_render: &mut Vec<(Srgba, Vec<Vec3>)>,
-    ) {
-        // Geometry calculations
-        let normal = self.normal_from_verts(verts);
-        let in_directions = self.vertex_in_directions(verts);
-
-        let verts_and_ins = verts.iter().zip_eq(&in_directions);
-        for ((i0, in0), (i1, in1)) in verts_and_ins.circular_tuple_windows() {
-            // Extract useful data
-            let (v0, v1) = (self.verts[*i0], self.verts[*i1]);
-            let edge_color = self.get_edge_color(*i0, *i1).unwrap_or(DEFAULT_EDGE_COLOR);
-            let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
-
-            match fixed_angle {
-                // If the unit has no fixed angle, then always make the units parallel
-                // to the faces
-                None => add_face(vec![v0, v1, v1 + in1 * side_ratio, v0 + in0 * side_ratio]),
-                Some(angle) => {
-                    let FixedAngle {
-                        unit_angle,
-                        push_direction,
-                        add_crinkle,
-                    } = angle;
-                    // Calculate the unit's inset angle, and therefore break the unit length down
-                    // into x/y components
-                    let inset_angle = unit_inset_angle(verts.len(), unit_angle.into());
-                    let l_in = side_ratio * inset_angle.cos();
-                    let l_up = side_ratio * inset_angle.sin();
-                    // Pick a normal to use based on the push direction
-                    let unit_up = match push_direction {
-                        Side::Out => normal,
-                        Side::In => -normal,
-                    };
-                    let up = unit_up * l_up;
-                    // Add faces
-                    if add_crinkle {
-                        let v0_peak = v0 + l_in * in0 * 0.5 + up * 0.5;
-                        let v1_peak = v1 + l_in * in1 * 0.5 + up * 0.5;
-                        add_face(vec![v0, v1, v1_peak, v0_peak]);
-                        add_face(vec![v0_peak, v1_peak, v1 + l_in * in1, v0 + l_in * in0]);
-                    } else {
-                        add_face(vec![v0, v1, v1 + l_in * in1 + up, v0 + l_in * in0 + up]);
-                    }
-                }
-            }
-        }
-    }
-
-    fn vertex_in_directions(&self, verts: &[VertIdx]) -> Vec<Vec3> {
-        let mut in_directions = Vec::new();
-        for (i0, i1, i2) in verts.iter().circular_tuple_windows() {
-            let v0 = self.verts[*i0];
-            let v1 = self.verts[*i1];
-            let v2 = self.verts[*i2];
-            let in_vec = ((v0 - v1) + (v2 - v1)).normalize();
-            // Normalize so that it has a projected length of 1 perpendicular to the edge
-            let normalized = normalize_perpendicular_to(in_vec, v2 - v1);
-            in_directions.push(normalized);
-        }
-        in_directions.rotate_right(1); // The 0th in-direction is actually from the 1st vertex
-        in_directions
-    }
-
-    fn triangulate_mesh(faces: Vec<(Srgba, Vec<Vec3>)>) -> (Vec<Vec3>, Vec<Srgba>, Vec<u32>) {
-        let mut verts = Vec::new();
-        let mut colors = Vec::new();
-        let mut tri_indices = Vec::new();
-
-        for (color, face_verts) in faces {
-            // Add all vertices from this face.  We have to duplicate the vertices so that each
-            // face gets flat shading
-            let first_vert_idx = verts.len() as u32;
-            verts.extend_from_slice(&face_verts);
-            // Add colours for this face's vertices
-            colors.extend(std::iter::repeat(color).take(face_verts.len()));
-            // Add the vert indices for this face
-            for i in 2..face_verts.len() as u32 {
-                tri_indices.extend_from_slice(&[
-                    first_vert_idx,
-                    first_vert_idx + i - 1,
-                    first_vert_idx + i,
-                ]);
-            }
-        }
-        (verts, colors, tri_indices)
-    }
-
-    fn edge_instances(&self) -> Instances {
-        let mut colors = Vec::new();
-        let mut transformations = Vec::new();
-        for edge in self.edges() {
-            colors.push(
-                self.get_edge_color(edge.bottom_vert, edge.top_vert)
-                    .unwrap_or(DEFAULT_WIREFRAME_COLOR),
-            );
-            transformations.push(edge_transform(
-                self.verts[edge.bottom_vert],
-                self.verts[edge.top_vert],
-            ));
-        }
-
-        Instances {
-            transformations,
-            colors: Some(colors),
-            ..Default::default()
-        }
-    }
-
-    fn vertex_instances(&self) -> Instances {
-        Instances {
-            transformations: self
-                .verts
-                .iter()
-                .cloned()
-                .map(Mat4::from_translation)
-                .collect_vec(),
-            colors: Some(
-                std::iter::repeat(DEFAULT_WIREFRAME_COLOR)
-                    .take(self.verts.len())
-                    .collect_vec(),
-            ),
-            ..Default::default()
-        }
-    }
-}
-
-fn unit_inset_angle(n: usize, unit_angle: Radians) -> Radians {
-    let interior_ngon_angle = Rad(PI - (PI * 2.0 / n as f32));
-    let mut angle = angle_in_spherical_triangle(unit_angle, interior_ngon_angle, unit_angle);
-    // Correct NaN angles (if the corner is too wide or the unit is level with the face and
-    // rounding errors cause us to get `NaN`)
-    if angle.0.is_nan() {
-        angle.0 = 0.0;
-    }
-    angle
-}
-
-fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
-    Mat4::from_translation(p1)
-        * Mat4::from(Quat::from_arc(
-            vec3(1.0, 0.0, 0.0),
-            (p2 - p1).normalize(),
-            None,
-        ))
-        * Mat4::from_nonuniform_scale((p1 - p2).magnitude(), 1.0, 1.0)
-}
-
 ///////////
 // UTILS //
 ///////////
@@ -1202,7 +899,6 @@ impl Polyhedron {
                 })
                 .map(Some)
                 .collect(),
-            edges: HashMap::new(),
         };
         m.make_centred();
         m
@@ -1219,6 +915,10 @@ impl Polyhedron {
         }
         // If vertex isn't already present, add a new one
         self.verts.push(p)
+    }
+
+    pub fn vert_pos(&self, idx: VertIdx) -> Vec3 {
+        self.verts[idx]
     }
 
     pub fn vert_positions(&self) -> &[Vec3] {
@@ -1280,7 +980,6 @@ impl Polyhedron {
                         bottom_vert: v1,
                         top_vert: v2,
                         length: direction.magnitude(),
-                        color: self.get_edge_color(v1, v2),
                         right_face: face_idx,
                         closed: None,
                     };
@@ -1290,16 +989,6 @@ impl Polyhedron {
         }
         // Dedup and return edges
         edges.into_values().collect_vec()
-    }
-
-    pub fn get_edge_color(&self, i0: VertIdx, i1: VertIdx) -> Option<Srgba> {
-        let key = (i0.min(i1), i0.max(i1));
-        self.edges.get(&key).and_then(|e| e.color)
-    }
-
-    pub fn set_edge_color(&mut self, i0: VertIdx, i1: VertIdx, color: Srgba) {
-        let key = (i0.min(i1), i0.max(i1));
-        self.edges.insert(key, EdgeData { color: Some(color) });
     }
 
     /// Gets an [`Iterator`] over the [indices](FaceIdx) of every face in `self` which has `n`
@@ -1389,11 +1078,11 @@ impl Polyhedron {
         )
     }
 
-    pub fn face_normal(&self, face: FaceIdx) -> Vec3 {
+    fn face_normal(&self, face: FaceIdx) -> Vec3 {
         self.faces[face].as_ref().unwrap().normal(self)
     }
 
-    pub fn normal_from_verts(&self, verts: &[VertIdx]) -> Vec3 {
+    fn normal_from_verts(&self, verts: &[VertIdx]) -> Vec3 {
         assert!(verts.len() >= 3);
         let v0 = self.get_vert_pos(verts, 0);
         let v1 = self.get_vert_pos(verts, 1);
@@ -1428,7 +1117,6 @@ pub struct Edge {
     pub bottom_vert: VertIdx,
     pub top_vert: VertIdx,
     pub length: f32,
-    pub color: Option<Srgba>,
     pub right_face: FaceIdx,
     pub closed: Option<ClosedEdgeData>,
 }
