@@ -175,6 +175,16 @@ fn main() {
                     poly.excavate_antiprism(top_face);
                     poly
                 }),
+                Model::new("Oriental Hat", {
+                    let PrismLike {
+                        mut poly,
+                        bottom_face,
+                        top_face: _,
+                    } = Polyhedron::rotunda();
+                    let bottom_face = poly.excavate_cupola(bottom_face, false);
+                    poly.excavate_antiprism(bottom_face);
+                    poly
+                }),
                 Model::new("Tunneled Truncated Cube", {
                     let mut poly = Polyhedron::truncated_cube();
                     let face = poly.ngons(8).nth(2).unwrap();
@@ -252,6 +262,16 @@ fn main() {
                     for decagon in poly.ngons(10).collect_vec() {
                         let next = poly.excavate_cupola(decagon, true);
                         inner_face = poly.excavate_antiprism(next);
+                    }
+                    let inner = Polyhedron::rhombicosidodecahedron();
+                    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0, &[]);
+                    poly
+                }),
+                Model::new("K_5 (rotunda)", {
+                    let mut poly = Polyhedron::great_rhombicosidodecahedron();
+                    let mut inner_face = FaceIdx::new(0);
+                    for decagon in poly.ngons(10).collect_vec() {
+                        inner_face = poly.excavate_rotunda(decagon, true);
                     }
                     let inner = Polyhedron::rhombicosidodecahedron();
                     poly.excavate(inner_face, &inner, inner.get_ngon(5), 0, &[]);

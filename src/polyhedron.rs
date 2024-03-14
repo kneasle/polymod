@@ -729,12 +729,18 @@ impl Polyhedron {
         self.merge_prismlike(face, MergeDir::Extend, 0, Self::prism)
     }
 
+    #[allow(dead_code)]
     pub fn extend_antiprism(&mut self, face: FaceIdx) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Extend, 0, Self::antiprism)
     }
 
     pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Extend, gyro as usize, Self::oriented_cupola)
+    }
+
+    #[allow(dead_code)]
+    pub fn extend_rotunda(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Extend, gyro as usize, |_n| Self::rotunda())
     }
 
     /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
@@ -772,6 +778,12 @@ impl Polyhedron {
             gyro as usize,
             Self::oriented_cupola,
         )
+    }
+
+    pub fn excavate_rotunda(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Excavate, gyro as usize, |_n| {
+            Self::rotunda()
+        })
     }
 
     fn merge_prismlike(
