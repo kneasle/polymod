@@ -4,6 +4,7 @@ use std::{
 };
 
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
 use three_d::{
     vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4,
     Zero,
@@ -605,6 +606,56 @@ impl Polyhedron {
             base_face,
         }
     }
+
+    pub fn rotunda() -> PrismLike {
+        let poly = Self::icosidodecahedron();
+        // Strip any vertices which are below the XZ plane (i.e. those with negative y-coordinates)
+        let mut vert_map = VertVec::new(); // Maps old vert indices to new vert indices
+        let mut new_verts = VertVec::new();
+        for &v in &poly.verts {
+            vert_map.push(if v.y > -0.00001 {
+                Some(new_verts.push(v))
+            } else {
+                None
+            });
+        }
+        // Recreate all the faces where all their vertices are preserved
+        let mut new_faces = FaceVec::new();
+        'face_loop: for face in poly.faces() {
+            let mut new_verts = Vec::new();
+            for &vert_idx in &face.verts {
+                let Some(new_vert_idx) = vert_map[vert_idx] else {
+                    continue 'face_loop; // If this face contains a vertex below XZ plane, skip entire face
+                };
+                new_verts.push(new_vert_idx);
+            }
+            new_faces.push(Some(Face { verts: new_verts }));
+        }
+        // Create a new decagon for the base
+        let mut verts_on_xz_plane = new_verts
+            .iter()
+            .positions(|v| v.y.abs() < 0.000001)
+            .map(VertIdx::new)
+            .collect_vec();
+        verts_on_xz_plane.sort_by_key(|v_idx| {
+            let pos = new_verts[*v_idx];
+            OrderedFloat(-f32::atan2(pos.x, pos.z))
+        });
+        let bottom_face = new_faces.push(Some(Face {
+            verts: verts_on_xz_plane,
+        }));
+
+        // Create a new poly for the rotunda
+        let poly = Polyhedron {
+            verts: new_verts,
+            faces: new_faces,
+        };
+        PrismLike {
+            top_face: poly.get_face_with_normal(Vec3::unit_y()),
+            bottom_face,
+            poly,
+        }
+    }
 }
 
 struct PolygonGeom {
@@ -676,6 +727,10 @@ impl Polyhedron {
 
     pub fn extend_prism(&mut self, face: FaceIdx) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Extend, 0, Self::prism)
+    }
+
+    pub fn extend_antiprism(&mut self, face: FaceIdx) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Extend, 0, Self::antiprism)
     }
 
     pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
@@ -1031,6 +1086,15 @@ impl Polyhedron {
 
     pub fn get_face(&self, face: FaceIdx) -> &Face {
         self.faces[face].as_ref().unwrap()
+    }
+
+    fn get_face_with_normal(&self, normal: Vec3) -> FaceIdx {
+        let (idx, _face) = self
+            .faces_enumerated()
+            .filter(|(_idx, f)| f.normal(&self).angle(normal) < Rad(0.01))
+            .next()
+            .unwrap();
+        idx
     }
 
     pub fn face_centroid(&self, face: FaceIdx) -> Vec3 {

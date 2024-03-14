@@ -98,6 +98,7 @@ fn main() {
                 Model::new("3-Cupola", Polyhedron::cupola(3).poly),
                 Model::new("4-Cupola", Polyhedron::cupola(4).poly),
                 Model::new("5-Cupola", Polyhedron::cupola(5).poly),
+                Model::new("Rotunda", Polyhedron::rotunda().poly),
             ],
         ),
         (
