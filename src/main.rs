@@ -185,7 +185,7 @@ fn main() {
                     poly.excavate_antiprism(bottom_face);
                     poly
                 }),
-                Model::new("Tunneled Truncated Cube", {
+                Model::new("Bob", {
                     let mut poly = Polyhedron::truncated_cube();
                     let face = poly.ngons(8).nth(2).unwrap();
                     let next = poly.excavate_cupola(face, true);
@@ -193,7 +193,7 @@ fn main() {
                     poly.excavate_cupola(next, false);
                     poly
                 }),
-                Model::new("Gyro-Tunneled Truncated Cube", {
+                Model::new("Gyrated Bob", {
                     let mut poly = Polyhedron::truncated_cube();
                     let face = poly.ngons(8).nth(2).unwrap();
                     let next = poly.excavate_cupola(face, false);
