@@ -174,6 +174,22 @@ fn main() {
                     poly.excavate_antiprism(top_face);
                     poly
                 }),
+                Model::new("Tunneled Truncated Cube", {
+                    let mut poly = Polyhedron::truncated_cube();
+                    let face = poly.ngons(8).nth(2).unwrap();
+                    let next = poly.excavate_cupola(face, true);
+                    let next = poly.excavate_prism(next);
+                    poly.excavate_cupola(next, false);
+                    poly
+                }),
+                Model::new("Gyro-Tunneled Truncated Cube", {
+                    let mut poly = Polyhedron::truncated_cube();
+                    let face = poly.ngons(8).nth(2).unwrap();
+                    let next = poly.excavate_cupola(face, false);
+                    let next = poly.excavate_prism(next);
+                    poly.excavate_cupola(next, false);
+                    poly
+                }),
                 Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
                 Model::new("Q_3 P_6 gQ_3 / P_6", qpq_slash_p(true)),
                 Model::new("Q_4^2 / B_4", {
@@ -196,6 +212,48 @@ fn main() {
                     }
                     // Excavate central octahedron
                     poly.excavate_antiprism(inner_face);
+                    poly
+                }),
+                Model::new("K_4 (tunnel octagons)", {
+                    let mut poly = Polyhedron::great_rhombicuboctahedron();
+                    let mut inner_face = FaceIdx::new(0);
+                    for octagon in poly.ngons(8).collect_vec() {
+                        inner_face = poly.excavate_cupola(octagon, false);
+                    }
+                    let inner = Polyhedron::rhombicuboctahedron();
+                    poly.excavate(inner_face, &inner, inner.get_ngon(4), 0, &[]);
+                    poly
+                }),
+                Model::new("K_4 (tunnel hexagons)", {
+                    let mut poly = Polyhedron::great_rhombicuboctahedron();
+                    let mut inner_face = FaceIdx::new(0);
+                    for hexagon in poly.ngons(6).collect_vec() {
+                        inner_face = poly.excavate_cupola(hexagon, true);
+                    }
+                    let inner = Polyhedron::rhombicuboctahedron();
+                    poly.excavate(inner_face, &inner, inner.get_ngon(3), 0, &[]);
+                    poly
+                }),
+                Model::new("K_4 (tunnel cubes)", {
+                    let mut poly = Polyhedron::great_rhombicuboctahedron();
+                    let mut inner_face = FaceIdx::new(0);
+                    for square in poly.ngons(4).collect_vec() {
+                        inner_face = poly.excavate_prism(square);
+                    }
+                    let inner = Polyhedron::rhombicuboctahedron();
+                    let face = inner.ngons(4).last().unwrap();
+                    poly.excavate(inner_face, &inner, face, 0, &[]);
+                    poly
+                }),
+                Model::new("K_5 (cupola/antiprism)", {
+                    let mut poly = Polyhedron::great_rhombicosidodecahedron();
+                    let mut inner_face = FaceIdx::new(0);
+                    for decagon in poly.ngons(10).collect_vec() {
+                        let next = poly.excavate_cupola(decagon, true);
+                        inner_face = poly.excavate_antiprism(next);
+                    }
+                    let inner = Polyhedron::rhombicosidodecahedron();
+                    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0, &[]);
                     poly
                 }),
                 Model::new("Apanar Deltahedron", {

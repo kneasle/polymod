@@ -529,6 +529,17 @@ impl Polyhedron {
         }
     }
 
+    /// Creates a cupola with `{bottom,top}_face` set such that the face with `n` sides is always
+    /// the 'bottom' face
+    pub fn oriented_cupola(n: usize) -> PrismLike {
+        let mut cupola = Self::cupola(n);
+        if n <= 5 {
+            // Swap top and bottom faces, since we are creating the cupola 'upside-down'
+            std::mem::swap(&mut cupola.bottom_face, &mut cupola.top_face);
+        }
+        cupola
+    }
+
     pub fn cupola_with_top(n: usize) -> PrismLike {
         assert!((3..=5).contains(&n));
         let top = PolygonGeom::new(n);
@@ -668,10 +679,7 @@ impl Polyhedron {
     }
 
     pub fn extend_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
-        self.merge_prismlike(face, MergeDir::Extend, gyro as usize, |n| {
-            assert!(n % 2 == 0);
-            Self::cupola(n / 2)
-        })
+        self.merge_prismlike(face, MergeDir::Extend, gyro as usize, Self::oriented_cupola)
     }
 
     /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
@@ -703,10 +711,12 @@ impl Polyhedron {
     }
 
     pub fn excavate_cupola(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
-        self.merge_prismlike(face, MergeDir::Excavate, gyro as usize, |n| {
-            assert!(n % 2 == 0);
-            Self::cupola(n / 2)
-        })
+        self.merge_prismlike(
+            face,
+            MergeDir::Excavate,
+            gyro as usize,
+            Self::oriented_cupola,
+        )
     }
 
     fn merge_prismlike(
