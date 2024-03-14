@@ -707,22 +707,14 @@ impl Polyhedron {
         other: &Self,
         its_face: FaceIdx,
         rotation: usize,
-        faces_to_track: &[FaceIdx],
-    ) -> Vec<FaceIdx> {
-        self.merge(
-            face,
-            other,
-            its_face,
-            rotation,
-            MergeDir::Extend,
-            faces_to_track,
-        )
+    ) -> FaceVec<FaceIdx> {
+        self.merge(face, other, its_face, rotation, MergeDir::Extend)
     }
 
     pub fn extend_pyramid(&mut self, face: FaceIdx) {
         let n = self.face_order(face);
         let pyramid = Polyhedron::pyramid(n);
-        self.extend(face, &pyramid.poly, pyramid.base_face, 0, &[]);
+        self.extend(face, &pyramid.poly, pyramid.base_face, 0);
     }
 
     pub fn extend_prism(&mut self, face: FaceIdx) -> FaceIdx {
@@ -751,16 +743,8 @@ impl Polyhedron {
         other: &Self,
         its_face: FaceIdx,
         rotation: usize,
-        faces_to_track: &[FaceIdx],
-    ) -> Vec<FaceIdx> {
-        self.merge(
-            face,
-            other,
-            its_face,
-            rotation,
-            MergeDir::Excavate,
-            faces_to_track,
-        )
+    ) -> FaceVec<FaceIdx> {
+        self.merge(face, other, its_face, rotation, MergeDir::Excavate)
     }
 
     pub fn excavate_prism(&mut self, face: FaceIdx) -> FaceIdx {
@@ -798,9 +782,8 @@ impl Polyhedron {
             bottom_face,
             top_face,
         } = f(self.face_order(face));
-        let tracked_faces = self.merge(face, &poly, bottom_face, rotation, dir, &[top_face]);
-        assert_eq!(tracked_faces.len(), 1);
-        tracked_faces[0]
+        let tracked_faces = self.merge(face, &poly, bottom_face, rotation, dir);
+        tracked_faces[top_face]
     }
 
     fn merge(
@@ -810,8 +793,7 @@ impl Polyhedron {
         its_face: FaceIdx,
         rotation: usize,
         dir: MergeDir,
-        faces_to_track: &[FaceIdx],
-    ) -> Vec<FaceIdx> {
+    ) -> FaceVec<FaceIdx> {
         assert_eq!(self.face_order(face), other.face_order(its_face));
         // Find the matrix transformation required to place `other` in the right location to
         // join `its_face` to `face` at the correct `rotation`
@@ -845,11 +827,8 @@ impl Polyhedron {
         // Cancel any new faces (which will include cancelling the two faces used to join these
         // polyhedra)
         self.cancel_faces();
-        // Return the new indices of the faces we were asked to track
-        faces_to_track
-            .iter()
-            .map(|f| new_face_indices[*f])
-            .collect_vec()
+        // Return the new indices of the faces in `other`
+        new_face_indices
     }
 
     /// Remove any pairs of identical but opposite faces

@@ -40,7 +40,7 @@ fn main() {
         poly.extend_cupola(bottom_face, false);
         poly.extend_cupola(top_face, gyro);
         let tunnel = Polyhedron::prism(6).poly;
-        poly.excavate(face_to_excavate, &tunnel, tunnel.get_ngon(4), 1, &[]);
+        poly.excavate(face_to_excavate, &tunnel, tunnel.get_ngon(4), 1);
         poly
     };
 
@@ -211,7 +211,7 @@ fn main() {
                     } = Polyhedron::cupola(4);
                     poly.extend_cupola(bottom_face, true);
                     let tunnel = Polyhedron::cuboctahedron();
-                    poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0, &[]);
+                    poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0);
                     poly
                 }),
                 Model::new("K_3 / 3Q_3 (S_3)", {
@@ -232,7 +232,7 @@ fn main() {
                         inner_face = poly.excavate_cupola(octagon, false);
                     }
                     let inner = Polyhedron::rhombicuboctahedron();
-                    poly.excavate(inner_face, &inner, inner.get_ngon(4), 0, &[]);
+                    poly.excavate(inner_face, &inner, inner.get_ngon(4), 0);
                     poly
                 }),
                 Model::new("K_4 (tunnel hexagons)", {
@@ -242,7 +242,7 @@ fn main() {
                         inner_face = poly.excavate_cupola(hexagon, true);
                     }
                     let inner = Polyhedron::rhombicuboctahedron();
-                    poly.excavate(inner_face, &inner, inner.get_ngon(3), 0, &[]);
+                    poly.excavate(inner_face, &inner, inner.get_ngon(3), 0);
                     poly
                 }),
                 Model::new("K_4 (tunnel cubes)", {
@@ -253,7 +253,7 @@ fn main() {
                     }
                     let inner = Polyhedron::rhombicuboctahedron();
                     let face = inner.ngons(4).last().unwrap();
-                    poly.excavate(inner_face, &inner, face, 0, &[]);
+                    poly.excavate(inner_face, &inner, face, 0);
                     poly
                 }),
                 Model::new("K_5 (cupola/antiprism)", {
@@ -264,7 +264,7 @@ fn main() {
                         inner_face = poly.excavate_antiprism(next);
                     }
                     let inner = Polyhedron::rhombicosidodecahedron();
-                    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0, &[]);
+                    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                     poly
                 }),
                 Model::new("K_5 (rotunda)", {
@@ -274,7 +274,7 @@ fn main() {
                         inner_face = poly.excavate_rotunda(decagon, true);
                     }
                     let inner = Polyhedron::rhombicosidodecahedron();
-                    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0, &[]);
+                    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                     poly
                 }),
                 Model::new("Apanar Deltahedron", {
