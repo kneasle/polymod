@@ -1,4 +1,8 @@
-use std::{collections::HashMap, f32::consts::PI};
+use std::{
+    collections::HashMap,
+    f32::consts::PI,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use itertools::Itertools;
 use three_d::{
@@ -14,8 +18,10 @@ use crate::{
     SMALL_SPACE,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Model {
+    id: ModelId,
+
     pub name: String,
     pub poly: Polyhedron,
 
@@ -32,6 +38,8 @@ pub struct Model {
 impl Model {
     pub fn new(name: &str, poly: Polyhedron) -> Self {
         Self {
+            id: ModelId::next_unique(),
+
             name: name.to_owned(),
             poly,
 
@@ -39,6 +47,10 @@ impl Model {
             color_index: ColVec::default(),
             view: ModelViewSettings::default(),
         }
+    }
+
+    pub fn id(&self) -> ModelId {
+        self.id
     }
 
     pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> Srgba {
@@ -524,6 +536,19 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
             None,
         ))
         * Mat4::from_nonuniform_scale((p1 - p2).magnitude(), 1.0, 1.0)
+}
+
+/// An identifier for a specific model
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ModelId(pub u32);
+
+static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+
+impl ModelId {
+    pub fn next_unique() -> Self {
+        let next_int = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+        Self(next_int)
+    }
 }
 
 index_vec::define_index_type! { pub struct ColIdx = usize; }
