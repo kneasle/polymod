@@ -53,6 +53,10 @@ impl Model {
         self.id
     }
 
+    pub fn set_id(&mut self, id: ModelId) {
+        self.id = id;
+    }
+
     pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> Srgba {
         match self.edge_colors.get(&(a, b)) {
             Some(idx) => self.color_index[*idx],

@@ -32,6 +32,22 @@ impl ModelTree {
         }
     }
 
+    pub fn get_mut_model_with_id(&mut self, id: ModelId) -> Option<&mut Model> {
+        match self {
+            ModelTree::Model(m) => (m.id() == id).then_some(m),
+            ModelTree::Group { name: _, children } => children
+                .iter_mut()
+                .find_map(|m| m.get_mut_model_with_id(id)),
+        }
+    }
+
+    pub fn add(&mut self, model: Model) {
+        match self {
+            ModelTree::Model(_) => panic!("Can't add a model to a non-group"),
+            ModelTree::Group { name: _, children } => children.push(Self::Model(model)),
+        }
+    }
+
     pub fn tree_gui(&self, ui: &mut egui::Ui, current_model_id: &mut ModelId) {
         match self {
             ModelTree::Group { name, children } => {

@@ -6,6 +6,7 @@ use polyhedron::Polyhedron;
 use three_d::{egui::RichText, *};
 
 use crate::{
+    model::ModelId,
     model_tree::ModelTree,
     polyhedron::{ClosedEdgeData, Edge},
     utils::ngon_name,
@@ -32,8 +33,9 @@ fn main() {
     .unwrap();
     let context = window.gl();
 
+    let mut custom_tree = ModelTree::new_group("Custom Models", []);
     let builtin_tree = ModelTree::builtin();
-    let mut custom_model_tree = ModelTree::new_group("Custom Models", []);
+
     let mut current_model_id = builtin_tree.first_model().id();
 
     // GUI variables
@@ -46,9 +48,12 @@ fn main() {
     let mut gui = three_d::GUI::new(&context);
     window.render_loop(move |mut frame_input| {
         macro_rules! current_model {
-            () => {
-                builtin_tree.get_model_with_id(current_model_id).unwrap()
-            };
+            () => {{
+                match custom_tree.get_model_with_id(current_model_id) {
+                    Some(m) => m,
+                    None => builtin_tree.get_model_with_id(current_model_id).unwrap(),
+                }
+            }};
         }
 
         // Render GUI
@@ -64,10 +69,10 @@ fn main() {
                 // Left panel
                 let response =
                     SidePanel::left("left-panel")
-                        .min_width(200.0)
+                        .min_width(300.0)
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
-                                custom_model_tree.tree_gui(ui, &mut current_model_id);
+                                custom_tree.tree_gui(ui, &mut current_model_id);
                                 ui.add_space(BIG_SPACE);
                                 ui.separator();
                                 builtin_tree.tree_gui(ui, &mut current_model_id);
@@ -80,19 +85,38 @@ fn main() {
                         .min_width(250.0)
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
-                                let current_model = current_model!();
+                                match custom_tree.get_mut_model_with_id(current_model_id) {
+                                    Some(model) => {
+                                        ui.heading("General Model Settings");
+                                        ui.horizontal(|ui| {
+                                            ui.label("Name:");
+                                            ui.text_edit_singleline(&mut model.name);
+                                        });
 
-                                // ui.heading("View Settings");
-                                // current_model.draw_view_gui(ui);
-                                // ui.add_space(WIDE_SPACE);
-                                // ui.separator();
-
-                                ui.heading("Model Properties");
-                                model_properties_gui(&current_model.poly, ui);
+                                        ui.add_space(SMALL_SPACE);
+                                        ui.heading("View Settings");
+                                        model.draw_view_gui(ui);
+                                    }
+                                    None => {
+                                        ui.label("Built-in models can't be edited.");
+                                        ui.label("Clone the model to edit it:");
+                                        if ui.button("Clone model").clicked() {
+                                            let mut new_model = current_model!().clone();
+                                            current_model_id = ModelId::next_unique();
+                                            new_model.set_id(current_model_id);
+                                            custom_tree.add(new_model);
+                                        }
+                                    }
+                                }
 
                                 ui.add_space(BIG_SPACE);
                                 ui.separator();
-                                ui.heading("Model Geometry");
+
+                                let current_model = current_model!();
+                                ui.heading("Properties");
+                                model_properties_gui(&current_model.poly, ui);
+                                ui.add_space(SMALL_SPACE);
+                                ui.heading("Geometry");
                                 model_geom_gui(current_model, &mut show_external_angles, ui);
                             });
                         });
