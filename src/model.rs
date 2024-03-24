@@ -28,7 +28,7 @@ pub struct Model {
     // Indexed colors for each side of each edge.  If `edge_colors[(a, b)] = idx` then the side
     // of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
     // given the color at `color_index[idx]`.
-    edge_colors: HashMap<(VertIdx, VertIdx), ColIdx>,
+    half_edge_colors: HashMap<(VertIdx, VertIdx), ColorIdx>,
     color_index: ColVec<Srgba>,
 
     // Display settings
@@ -43,7 +43,7 @@ impl Model {
             name: name.to_owned(),
             poly,
 
-            edge_colors: HashMap::default(),
+            half_edge_colors: HashMap::default(),
             color_index: ColVec::default(),
             view: ModelViewSettings::default(),
         }
@@ -57,8 +57,21 @@ impl Model {
         self.id = id;
     }
 
+    pub fn add_color(&mut self, color: Srgba) -> ColorIdx {
+        self.color_index.push(color)
+    }
+
+    pub fn set_full_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
+        self.set_half_edge_color(v1, v2, color);
+        self.set_half_edge_color(v2, v1, color);
+    }
+
+    pub fn set_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
+        self.half_edge_colors.insert((v1, v2), color);
+    }
+
     pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> Srgba {
-        match self.edge_colors.get(&(a, b)) {
+        match self.half_edge_colors.get(&(a, b)) {
             Some(idx) => self.color_index[*idx],
             None => DEFAULT_COLOR,
         }
@@ -555,5 +568,5 @@ impl ModelId {
     }
 }
 
-index_vec::define_index_type! { pub struct ColIdx = usize; }
-pub type ColVec<T> = index_vec::IndexVec<ColIdx, T>;
+index_vec::define_index_type! { pub struct ColorIdx = usize; }
+pub type ColVec<T> = index_vec::IndexVec<ColorIdx, T>;

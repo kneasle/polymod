@@ -45,7 +45,7 @@ impl ModelView {
             &CpuMaterial {
                 albedo: Srgba::WHITE,
                 roughness: 0.7,
-                metallic: 0.8,
+                metallic: 0.0,
                 ..Default::default()
             },
         );

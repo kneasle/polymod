@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use three_d::egui;
+use three_d::{egui, Srgba};
 
 use crate::{
     model::{Model, ModelId},
@@ -334,7 +334,7 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
-            Model::new("Apanar Deltahedron", {
+            {
                 // Create a bicupola
                 let PrismLike {
                     mut poly,
@@ -347,7 +347,7 @@ impl ModelTree {
                     .map(|(idx, _face)| idx)
                     .collect_vec();
                 // Dig tunnel
-                let edges_to_color = poly.get_edges_added_by(|poly| {
+                let (edges_to_color, _) = poly.get_edges_added_by(|poly| {
                     poly.excavate_antiprism(bottom_face);
                     poly.excavate_antiprism(top_face);
                 });
@@ -357,8 +357,14 @@ impl ModelTree {
                         poly.extend_pyramid(face);
                     }
                 }
-                poly
-            }),
+                // Create the model, and color the edges
+                let mut model = Model::new("Apanar Deltahedron", poly);
+                let blue = model.add_color(Srgba::new_opaque(50, 90, 255));
+                for (v1, v2) in edges_to_color {
+                    model.set_full_edge_color(v1, v2, blue);
+                }
+                model
+            },
         ];
         Self::new_group("Toroids", toroids)
     }
