@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+
+use ordered_float::OrderedFloat;
 use three_d::{egui, Angle, InnerSpace, Radians, Srgba, Vec3};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,31 +41,51 @@ pub fn angle_in_spherical_triangle(a: Radians, b: Radians, c: Radians) -> Radian
     Radians::acos(cos_angle)
 }
 
-pub fn lerp_color(a: Srgba, b: Srgba, factor: f32) -> Srgba {
-    let lerp = |a: u8, b: u8| -> u8 {
-        let v = (a as f32) * (1.0 - factor) + (b as f32) * factor;
-        v as u8
-    };
+pub fn darken_color(c: egui::Rgba, factor: f32) -> egui::Rgba {
+    egui::Rgba::from_rgba_premultiplied(c.r() * factor, c.g() * factor, c.b() * factor, c.a())
+}
+
+pub fn lerp_color(a: egui::Rgba, b: egui::Rgba, factor: f32) -> egui::Rgba {
+    a * (1.0 - factor) + b * factor
+}
+
+pub fn egui_color_to_srgba(c: egui::Rgba) -> Srgba {
+    let [r, g, b, a] = c.to_rgba_unmultiplied();
     Srgba {
-        r: lerp(a.r, b.r),
-        g: lerp(a.g, b.g),
-        b: lerp(a.b, b.b),
-        a: lerp(a.a, b.a),
+        r: (r * 255.0) as u8,
+        g: (g * 255.0) as u8,
+        b: (b * 255.0) as u8,
+        a: (a * 255.0) as u8,
     }
 }
 
-pub fn darken_color(c: Srgba, factor: f32) -> Srgba {
-    let darken = |c: u8| -> u8 { (c as f32 * factor) as u8 };
-    Srgba {
-        r: darken(c.r),
-        g: darken(c.g),
-        b: darken(c.b),
-        a: c.a,
+#[derive(Clone, Copy)]
+pub struct OrderedRgba(pub egui::Rgba);
+
+impl OrderedRgba {
+    fn as_ordered_floats(self) -> [OrderedFloat<f32>; 4] {
+        self.0.to_array().map(OrderedFloat)
     }
 }
 
-pub fn srgba_to_egui_color(c: Srgba) -> egui::Color32 {
-    egui::Color32::from_rgba_unmultiplied(c.r, c.g, c.b, c.a)
+impl PartialEq for OrderedRgba {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_ordered_floats() == other.as_ordered_floats()
+    }
+}
+
+impl Eq for OrderedRgba {}
+
+impl PartialOrd for OrderedRgba {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OrderedRgba {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_ordered_floats().cmp(&other.as_ordered_floats())
+    }
 }
 
 pub fn lerp3(a: Vec3, b: Vec3, t: f32) -> Vec3 {

@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use three_d::{egui, Srgba};
+use three_d::egui;
 
 use crate::{
     model::{Model, ModelId},
@@ -359,7 +359,7 @@ impl ModelTree {
                 }
                 // Create the model, and color the edges
                 let mut model = Model::new("Apanar Deltahedron", poly);
-                let blue = model.add_color(Srgba::new_opaque(50, 90, 255));
+                let blue = model.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
                 for (v1, v2) in edges_to_color {
                     model.set_full_edge_color(v1, v2, blue);
                 }

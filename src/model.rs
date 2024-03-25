@@ -7,14 +7,13 @@ use std::{
 use itertools::Itertools;
 use three_d::{
     egui, vec3, Angle, CpuMesh, Deg, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4,
-    Positions, Quat, Rad, Radians, Srgba, Vec3,
+    Positions, Quat, Rad, Radians, Vec3,
 };
 
+use crate::utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba};
 use crate::{
     polyhedron::{Face, Polyhedron, VertIdx},
-    utils::{
-        angle_in_spherical_triangle, darken_color, lerp_color, normalize_perpendicular_to, Side,
-    },
+    utils::{lerp_color, normalize_perpendicular_to, Side},
     SMALL_SPACE,
 };
 
@@ -29,7 +28,7 @@ pub struct Model {
     // of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
     // given the color at `color_index[idx]`.
     half_edge_colors: HashMap<(VertIdx, VertIdx), ColorIdx>,
-    color_index: ColVec<Srgba>,
+    color_index: ColVec<egui::Rgba>,
 
     // Display settings
     view: ModelViewSettings,
@@ -57,7 +56,7 @@ impl Model {
         self.id = id;
     }
 
-    pub fn add_color(&mut self, color: Srgba) -> ColorIdx {
+    pub fn add_color(&mut self, color: egui::Rgba) -> ColorIdx {
         self.color_index.push(color)
     }
 
@@ -70,14 +69,14 @@ impl Model {
         self.half_edge_colors.insert((v1, v2), color);
     }
 
-    pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> Srgba {
+    pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
         match self.half_edge_colors.get(&(a, b)) {
             Some(idx) => self.color_index[*idx],
             None => DEFAULT_COLOR,
         }
     }
 
-    pub fn mixed_edge_color(&self, a: VertIdx, b: VertIdx) -> Srgba {
+    pub fn mixed_edge_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
         let left_color = self.edge_side_color(a, b);
         let right_color = self.edge_side_color(b, a);
         lerp_color(left_color, right_color, 0.5)
@@ -267,7 +266,7 @@ impl OwUnit {
 // RENDERING //
 ///////////////
 
-pub const DEFAULT_COLOR: Srgba = Srgba::new_opaque(100, 100, 100);
+pub const DEFAULT_COLOR: egui::Rgba = egui::Rgba::from_rgb(0.4, 0.4, 0.4);
 const WIREFRAME_TINT: f32 = 0.3;
 const INSIDE_TINT: f32 = 0.5;
 
@@ -337,9 +336,13 @@ impl Model {
             ]);
         }
 
+        let converted_colors = all_colors
+            .into_iter()
+            .map(egui_color_to_srgba)
+            .collect_vec();
         let mut mesh = CpuMesh {
             positions: Positions::F32(all_verts),
-            colors: Some(all_colors),
+            colors: Some(converted_colors),
             indices: Indices::U32(all_tri_indices),
             ..Default::default()
         };
@@ -347,7 +350,7 @@ impl Model {
         mesh
     }
 
-    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(Srgba, Vec<Vec3>)> {
+    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(egui::Rgba, Vec<Vec3>)> {
         let mut faces_to_render = Vec::new();
         for face in self.poly.faces() {
             // Decide how to render them, according to the style
@@ -374,7 +377,7 @@ impl Model {
         face: &Face,
         side_ratio: f32,
         fixed_angle: Option<FixedAngle>,
-        faces_to_render: &mut Vec<(Srgba, Vec<Vec3>)>,
+        faces_to_render: &mut Vec<(egui::Rgba, Vec<Vec3>)>,
     ) {
         // Geometry calculations
         let normal = face.normal(&self.poly);
@@ -438,7 +441,9 @@ impl Model {
         in_directions
     }
 
-    fn triangulate_mesh(faces: Vec<(Srgba, Vec<Vec3>)>) -> (Vec<Vec3>, Vec<Srgba>, Vec<u32>) {
+    fn triangulate_mesh(
+        faces: Vec<(egui::Rgba, Vec<Vec3>)>,
+    ) -> (Vec<Vec3>, Vec<egui::Rgba>, Vec<u32>) {
         let mut verts = Vec::new();
         let mut colors = Vec::new();
         let mut tri_indices = Vec::new();
@@ -482,10 +487,11 @@ impl Model {
         let mut colors = Vec::new();
         let mut transformations = Vec::new();
         for edge in self.poly.edges() {
-            colors.push(darken_color(
+            let color = darken_color(
                 self.mixed_edge_color(edge.bottom_vert, edge.top_vert),
                 WIREFRAME_TINT,
-            ));
+            );
+            colors.push(egui_color_to_srgba(color));
             transformations.push(edge_transform(
                 self.poly.vert_pos(edge.bottom_vert),
                 self.poly.vert_pos(edge.top_vert),
@@ -519,16 +525,14 @@ impl Model {
 
     fn vertex_instances(&self) -> Instances {
         let verts = &self.poly.vert_positions();
+        let color = egui_color_to_srgba(darken_color(DEFAULT_COLOR, WIREFRAME_TINT));
         Instances {
             transformations: verts
                 .iter()
                 .cloned()
                 .map(Mat4::from_translation)
                 .collect_vec(),
-            colors: Some(vec![
-                darken_color(DEFAULT_COLOR, WIREFRAME_TINT);
-                verts.len()
-            ]),
+            colors: Some(vec![color; verts.len()]),
             ..Default::default()
         }
     }

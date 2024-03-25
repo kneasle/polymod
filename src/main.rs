@@ -4,6 +4,7 @@ use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use polyhedron::Polyhedron;
 use three_d::{egui::RichText, *};
+use utils::OrderedRgba;
 
 use crate::{
     model::ModelId,
@@ -204,7 +205,7 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
     let edges = model.poly.edges();
     let mut num_open_edges = 0;
     let mut edge_types =
-        BTreeMap::<(usize, usize, Srgba), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
+        BTreeMap::<(usize, usize, OrderedRgba), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
     for edge in &edges {
         match edge.closed {
             Some(ClosedEdgeData {
@@ -218,7 +219,7 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
                                                                // Record this new edge
                 let col = model.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let edge_list: &mut Vec<&Edge> = edge_types
-                    .entry((left_n.min(right_n), left_n.max(right_n), col))
+                    .entry((left_n.min(right_n), left_n.max(right_n), OrderedRgba(col)))
                     .or_default()
                     .entry(OrderedFloat(dihedral))
                     .or_default();
@@ -240,7 +241,7 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
             format!("{:.2}°", angle)
         };
         for ((n1, n2, color), angle_breakdown) in edge_types {
-            let color = utils::srgba_to_egui_color(color);
+            let OrderedRgba(color) = color;
             assert!(!angle_breakdown.is_empty());
             let num_edges = angle_breakdown.values().map(Vec::len).sum::<usize>();
             // Display overall group
