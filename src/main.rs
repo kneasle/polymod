@@ -94,7 +94,7 @@ fn main() {
                                         ui.heading("General Model Settings");
                                         ui.horizontal(|ui| {
                                             ui.label("Name:");
-                                            ui.text_edit_singleline(&mut model.name);
+                                            ui.text_edit_singleline(model.name_mut());
                                         });
 
                                         ui.add_space(SMALL_SPACE);
@@ -118,10 +118,14 @@ fn main() {
 
                                 let current_model = current_model!();
                                 ui.heading("Properties");
-                                model_properties_gui(&current_model.poly, ui);
+                                model_properties_gui(current_model.polyhedron(), ui);
                                 ui.add_space(SMALL_SPACE);
                                 ui.heading("Geometry");
-                                model_geom_gui(current_model, &mut show_external_angles, ui);
+                                model_geom_gui(
+                                    current_model.polyhedron(),
+                                    &mut show_external_angles,
+                                    ui,
+                                );
                             });
                         });
                 right_panel_width = response.response.rect.width();
@@ -187,11 +191,11 @@ fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
 }
 
 // TODO: Make this a method
-fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui::Ui) {
+fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
     // Faces
-    ui.strong(format!("{} faces", model.poly.faces().count()));
+    ui.strong(format!("{} faces", poly.faces().count()));
     ui.indent("faces", |ui| {
-        let faces_by_ngon = model.poly.faces().into_group_map_by(|f| f.verts().len());
+        let faces_by_ngon = poly.faces().into_group_map_by(|f| f.verts().len());
         for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
             let count = faces.len();
             ui.label(format!(
@@ -205,7 +209,7 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
 
     // Edges
     ui.add_space(SMALL_SPACE);
-    let edges = model.poly.edges();
+    let edges = poly.edges();
     let mut num_open_edges = 0;
     let mut edge_types =
         BTreeMap::<(usize, usize, OrderedRgba), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
@@ -215,12 +219,12 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
                 left_face,
                 dihedral_angle,
             }) => {
-                let left_n = model.poly.face_order(left_face);
-                let right_n = model.poly.face_order(edge.right_face);
+                let left_n = poly.face_order(left_face);
+                let right_n = poly.face_order(edge.right_face);
                 let mut dihedral = Degrees::from(dihedral_angle).0;
                 dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
                                                                // Record this new edge
-                let col = model.poly.edge_side_color(edge.bottom_vert, edge.top_vert);
+                let col = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let edge_list: &mut Vec<&Edge> = edge_types
                     .entry((left_n.min(right_n), left_n.max(right_n), OrderedRgba(col)))
                     .or_default()
@@ -281,5 +285,5 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
 
     // Vertices
     ui.add_space(SMALL_SPACE);
-    ui.strong(format!("{} vertices", model.poly.vert_positions().len()));
+    ui.strong(format!("{} vertices", poly.vert_positions().len()));
 }

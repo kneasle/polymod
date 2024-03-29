@@ -25,7 +25,7 @@ impl ModelTree {
     }
 
     pub fn get_model_with_name<'s>(&'s self, name: &str) -> Option<&'s Model> {
-        self.flatten().into_iter().find(|m| m.name == name)
+        self.flatten().into_iter().find(|m| m.name() == name)
     }
 
     pub fn flatten_mut(&mut self) -> Vec<&mut Model> {
@@ -82,9 +82,9 @@ impl ModelTree {
             }
             ModelTree::Model(m) => {
                 if m.id() == *current_model_id {
-                    ui.strong(&m.name);
+                    ui.strong(m.name());
                 } else {
-                    if ui.button(&m.name).clicked() {
+                    if ui.button(m.name()).clicked() {
                         *current_model_id = m.id();
                     }
                 }

@@ -20,8 +20,8 @@ use crate::{
 pub struct Model {
     id: ModelId,
 
-    pub name: String,
-    pub poly: Polyhedron,
+    name: String,
+    polyhedron: Polyhedron,
 
     // Display settings
     view: ModelViewSettings,
@@ -33,10 +33,22 @@ impl Model {
             id: ModelId::next_unique(),
 
             name: name.to_owned(),
-            poly,
+            polyhedron: poly,
 
             view: ModelViewSettings::default(),
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn name_mut(&mut self) -> &mut String {
+        &mut self.name
+    }
+
+    pub fn polyhedron(&self) -> &Polyhedron {
+        &self.polyhedron
     }
 
     pub fn id(&self) -> ModelId {
@@ -316,12 +328,12 @@ impl Model {
 
     fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(egui::Rgba, Vec<Vec3>)> {
         let mut faces_to_render = Vec::new();
-        for face in self.poly.faces() {
+        for face in self.polyhedron.faces() {
             // Decide how to render them, according to the style
             match style {
                 // For solid faces, just render the face as-is
                 FaceRenderStyle::Solid => {
-                    let verts = face.vert_positions(&self.poly);
+                    let verts = face.vert_positions(&self.polyhedron);
                     faces_to_render.push((Polyhedron::DEFAULT_COLOR, verts));
                 }
                 // For ow-like faces, render up to two faces per edge
@@ -344,8 +356,8 @@ impl Model {
         faces_to_render: &mut Vec<(egui::Rgba, Vec<Vec3>)>,
     ) {
         // Geometry calculations
-        let normal = face.normal(&self.poly);
-        let vert_positions = face.vert_positions(&self.poly);
+        let normal = face.normal(&self.polyhedron);
+        let vert_positions = face.vert_positions(&self.polyhedron);
         let in_directions = self.vertex_in_directions(&vert_positions);
 
         let verts_and_ins = face
@@ -355,7 +367,7 @@ impl Model {
             .zip_eq(&in_directions);
         for (((i0, v0), in0), ((i1, v1), in1)) in verts_and_ins.circular_tuple_windows() {
             // Extract useful data
-            let edge_color = self.poly.edge_side_color(*i0, *i1);
+            let edge_color = self.polyhedron.edge_side_color(*i0, *i1);
             let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
 
             match fixed_angle {
@@ -450,15 +462,16 @@ impl Model {
     fn edge_instances(&self) -> Instances {
         let mut colors = Vec::new();
         let mut transformations = Vec::new();
-        for edge in self.poly.edges() {
+        for edge in self.polyhedron.edges() {
             let color = darken_color(
-                self.poly.mixed_edge_color(edge.bottom_vert, edge.top_vert),
+                self.polyhedron
+                    .mixed_edge_color(edge.bottom_vert, edge.top_vert),
                 WIREFRAME_TINT,
             );
             colors.push(egui_color_to_srgba(color));
             transformations.push(edge_transform(
-                self.poly.vert_pos(edge.bottom_vert),
-                self.poly.vert_pos(edge.top_vert),
+                self.polyhedron.vert_pos(edge.bottom_vert),
+                self.polyhedron.vert_pos(edge.top_vert),
             ));
         }
 
@@ -488,7 +501,7 @@ impl Model {
     }
 
     fn vertex_instances(&self) -> Instances {
-        let verts = &self.poly.vert_positions();
+        let verts = &self.polyhedron.vert_positions();
         let color = egui_color_to_srgba(darken_color(Polyhedron::DEFAULT_COLOR, WIREFRAME_TINT));
         Instances {
             transformations: verts
