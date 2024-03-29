@@ -993,6 +993,13 @@ impl Polyhedron {
         self.color_index.push(color)
     }
 
+    pub fn color_face(&mut self, face: FaceIdx, color: ColorIdx) {
+        let verts = &self.get_face(face).verts.clone();
+        for (v1, v2) in verts.iter().circular_tuple_windows() {
+            self.set_half_edge_color(*v2, *v1, color);
+        }
+    }
+
     pub fn set_full_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
         self.set_half_edge_color(v1, v2, color);
         self.set_half_edge_color(v2, v1, color);

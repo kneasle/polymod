@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use three_d::egui;
+use three_d::egui::{self, Rgba};
 
 use crate::{
     model::{Model, ModelId},
@@ -371,6 +371,14 @@ impl ModelTree {
                 }
                 let inner = Polyhedron::dodecahedron();
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+                poly
+            }),
+            Model::new("Football", {
+                let mut poly = Polyhedron::truncated_icosahedron();
+                let black = poly.add_color(Rgba::BLACK);
+                for face in poly.ngons(5).collect_vec() {
+                    poly.color_face(face, black);
+                }
                 poly
             }),
             Model::new("Apanar Deltahedron", {

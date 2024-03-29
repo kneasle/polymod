@@ -367,7 +367,7 @@ impl Model {
             .zip_eq(&in_directions);
         for (((i0, v0), in0), ((i1, v1), in1)) in verts_and_ins.circular_tuple_windows() {
             // Extract useful data
-            let edge_color = self.polyhedron.edge_side_color(*i0, *i1);
+            let edge_color = self.polyhedron.edge_side_color(*i1, *i0);
             let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
 
             match fixed_angle {
