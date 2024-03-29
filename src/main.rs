@@ -37,7 +37,10 @@ fn main() {
     let mut custom_tree = ModelTree::new_group("Custom Models", []);
     let builtin_tree = ModelTree::builtin();
 
-    let mut current_model_id = builtin_tree.first_model().id();
+    let mut current_model_id = builtin_tree
+        .get_model_with_name("Apanar Deltahedron")
+        .unwrap()
+        .id();
 
     // GUI variables
     let mut show_external_angles = false;

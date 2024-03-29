@@ -16,28 +16,49 @@ pub enum ModelTree {
 }
 
 impl ModelTree {
-    pub fn first_model(&self) -> &Model {
-        match self {
-            ModelTree::Model(m) => m,
-            ModelTree::Group { name: _, children } => children[0].first_model(),
-        }
+    pub fn get_model_with_id(&self, id: ModelId) -> Option<&Model> {
+        self.flatten().into_iter().find(|m| m.id() == id)
     }
 
-    pub fn get_model_with_id(&self, id: ModelId) -> Option<&Model> {
+    pub fn get_mut_model_with_id(&mut self, id: ModelId) -> Option<&mut Model> {
+        self.flatten_mut().into_iter().find(|m| m.id() == id)
+    }
+
+    pub fn get_model_with_name<'s>(&'s self, name: &str) -> Option<&'s Model> {
+        self.flatten().into_iter().find(|m| &m.name == name)
+    }
+
+    pub fn flatten_mut(&mut self) -> Vec<&mut Model> {
+        let mut models = Vec::new();
+        self.flatten_recursive_mut(&mut models);
+        models
+    }
+
+    fn flatten_recursive_mut<'s>(&'s mut self, vec: &mut Vec<&'s mut Model>) {
         match self {
-            ModelTree::Model(m) => (m.id() == id).then_some(m),
+            ModelTree::Model(m) => vec.push(m),
             ModelTree::Group { name: _, children } => {
-                children.iter().find_map(|m| m.get_model_with_id(id))
+                for child in children {
+                    child.flatten_recursive_mut(vec);
+                }
             }
         }
     }
 
-    pub fn get_mut_model_with_id(&mut self, id: ModelId) -> Option<&mut Model> {
+    pub fn flatten(&self) -> Vec<&Model> {
+        let mut models = Vec::new();
+        self.flatten_recursive(&mut models);
+        models
+    }
+
+    fn flatten_recursive<'s>(&'s self, vec: &mut Vec<&'s Model>) {
         match self {
-            ModelTree::Model(m) => (m.id() == id).then_some(m),
-            ModelTree::Group { name: _, children } => children
-                .iter_mut()
-                .find_map(|m| m.get_mut_model_with_id(id)),
+            ModelTree::Model(m) => vec.push(m),
+            ModelTree::Group { name: _, children } => {
+                for child in children {
+                    child.flatten_recursive(vec);
+                }
+            }
         }
     }
 
@@ -77,6 +98,13 @@ impl ModelTree {
 ////////////////////
 
 impl ModelTree {
+    pub fn new_group(name: &str, models: impl IntoIterator<Item = Model>) -> Self {
+        Self::Group {
+            name: name.to_owned(),
+            children: models.into_iter().map(ModelTree::Model).collect_vec(),
+        }
+    }
+
     pub fn builtin() -> Self {
         let platonic = [
             Model::new("Tetrahedron", Polyhedron::tetrahedron()),
@@ -367,12 +395,5 @@ impl ModelTree {
             },
         ];
         Self::new_group("Toroids", toroids)
-    }
-
-    pub fn new_group(name: &str, models: impl IntoIterator<Item = Model>) -> Self {
-        Self::Group {
-            name: name.to_owned(),
-            children: models.into_iter().map(ModelTree::Model).collect_vec(),
-        }
     }
 }
