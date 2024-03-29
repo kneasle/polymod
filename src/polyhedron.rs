@@ -845,6 +845,21 @@ impl Polyhedron {
         // Cancel any new faces (which will include cancelling the two faces used to join these
         // polyhedra)
         self.cancel_faces();
+
+        // Merge colours
+        let mut new_color_idxs = ColVec::new();
+        for &color in other.color_index.iter() {
+            let new_idx = self.color_index.push(color);
+            new_color_idxs.push(new_idx);
+        }
+        // Merge colour assignments
+        for ((v1, v2), source_col_idx) in &other.half_edge_colors {
+            let new_v1 = new_vert_indices[*v1];
+            let new_v2 = new_vert_indices[*v2];
+            let new_col = new_color_idxs[*source_col_idx];
+            self.half_edge_colors.insert((new_v1, new_v2), new_col);
+        }
+
         // Return the new indices of the faces in `other`
         new_face_indices
     }

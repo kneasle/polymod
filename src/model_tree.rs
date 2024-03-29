@@ -3,7 +3,7 @@ use three_d::egui::{self, Rgba};
 
 use crate::{
     model::{Model, ModelId},
-    polyhedron::{FaceIdx, Polyhedron, PrismLike},
+    polyhedron::{FaceIdx, Polyhedron, PrismLike, Pyramid},
 };
 
 #[derive(Debug, Clone)]
@@ -410,7 +410,70 @@ impl ModelTree {
                 }
                 poly
             }),
+            Model::new(
+                "Prism-Extended Cuboctahedron",
+                prism_extended_cuboctahedron(),
+            ),
         ];
         Self::new_group("Toroids", toroids)
     }
+}
+
+fn prism_extended_cuboctahedron() -> Polyhedron {
+    // Make the pyramids out of which the cuboctahedron's faces will be constructed
+    let make_pyramid = |n: usize| -> (Polyhedron, Vec<FaceIdx>) {
+        let Pyramid {
+            mut poly,
+            base_face,
+        } = Polyhedron::pyramid(n);
+        // Colour the base face
+        let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
+        let verts = &poly.get_face(base_face).verts().to_vec();
+        for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
+            poly.set_half_edge_color(v2, v1, blue);
+        }
+        // Get the side faces
+        let side_faces = poly
+            .faces_enumerated()
+            .map(|(id, _)| id)
+            .filter(|id| *id != base_face)
+            .collect_vec();
+        (poly, side_faces)
+    };
+    let (tri_pyramid, tri_pyramid_side_faces) = make_pyramid(3);
+    let (quad_pyramid, quad_pyramid_side_faces) = make_pyramid(4);
+
+    // Recursively build the polyhedron
+    let mut poly = quad_pyramid.clone();
+    let mut faces_to_expand = quad_pyramid_side_faces
+        .iter()
+        .map(|idx| (*idx, 3))
+        .collect_vec();
+    while let Some((face_to_extend, order_of_new_pyramid)) = faces_to_expand.pop() {
+        // Get which pyramid we're going to add
+        let (pyramid, side_faces, next_pyramid_order) = match order_of_new_pyramid {
+            3 => (&tri_pyramid, &tri_pyramid_side_faces, 4),
+            4 => (&quad_pyramid, &quad_pyramid_side_faces, 3),
+            _ => unreachable!(),
+        };
+
+        // Add prism and pyramid
+        if !poly.is_face(face_to_extend) {
+            continue; // Face has already been connected to something
+        }
+        let opposite_face = poly.extend_prism(face_to_extend);
+        if !poly.is_face(opposite_face) {
+            continue; // Connecting to something which already exists
+        }
+        let face_mapping = poly.extend(opposite_face, &pyramid, side_faces[0], 2);
+
+        // Add new faces to extend
+        for &source_side_face in side_faces {
+            faces_to_expand.push((face_mapping[source_side_face], next_pyramid_order));
+        }
+    }
+
+    // Centre the polyhedron and return it
+    poly.make_centred();
+    poly
 }
