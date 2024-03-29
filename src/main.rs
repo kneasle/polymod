@@ -211,8 +211,10 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
     ui.add_space(SMALL_SPACE);
     let edges = poly.edges();
     let mut num_open_edges = 0;
-    let mut edge_types =
-        BTreeMap::<(usize, usize, OrderedRgba), BTreeMap<OrderedFloat<f32>, Vec<&Edge>>>::new();
+    let mut edge_types = BTreeMap::<
+        ((usize, OrderedRgba), (usize, OrderedRgba)),
+        BTreeMap<OrderedFloat<f32>, Vec<&Edge>>,
+    >::new();
     for edge in &edges {
         match edge.closed {
             Some(ClosedEdgeData {
@@ -223,10 +225,17 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
                 let right_n = poly.face_order(edge.right_face);
                 let mut dihedral = Degrees::from(dihedral_angle).0;
                 dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
-                                                               // Record this new edge
-                let col = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
+
+                let col_left = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
+                let col_right = poly.edge_side_color(edge.top_vert, edge.bottom_vert);
+                let mut left = (left_n, OrderedRgba(col_left));
+                let mut right = (right_n, OrderedRgba(col_right));
+                if left > right {
+                    std::mem::swap(&mut left, &mut right);
+                }
+                // Record this new edge
                 let edge_list: &mut Vec<&Edge> = edge_types
-                    .entry((left_n.min(right_n), left_n.max(right_n), OrderedRgba(col)))
+                    .entry((left, right))
                     .or_default()
                     .entry(OrderedFloat(dihedral))
                     .or_default();
@@ -247,35 +256,30 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
             }
             format!("{:.2}°", angle)
         };
-        for ((n1, n2, color), angle_breakdown) in edge_types {
-            let OrderedRgba(color) = color;
+        for (key, angle_breakdown) in edge_types {
+            let ((n1, OrderedRgba(col1)), (n2, OrderedRgba(col2))) = key;
             assert!(!angle_breakdown.is_empty());
             let num_edges = angle_breakdown.values().map(Vec::len).sum::<usize>();
-            // Display overall group
-            let angle_string = if angle_breakdown.len() == 1 {
-                let only_angle = *angle_breakdown.keys().next().unwrap();
-                format!(" ({})", display_angle(only_angle))
-            } else {
-                String::new()
-            };
-            ui.colored_label(
-                color,
-                format!(
-                    "{} {}-{}{}",
-                    num_edges,
-                    ngon_name(n1),
-                    ngon_name(n2),
-                    angle_string,
-                ),
-            );
+            // Display overall group (e.g. "60 triangle-pentagon (152.0°)")
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                // Count
+                ui.label(format!("{} ", num_edges));
+                // Ngon pair (e.g. "triangle-decagon")
+                ui.colored_label(col1, ngon_name(n1));
+                ui.label("-");
+                ui.colored_label(col2, ngon_name(n2));
+                // Angle
+                if angle_breakdown.len() == 1 {
+                    let only_angle = *angle_breakdown.keys().next().unwrap();
+                    ui.label(format!(" ({})", display_angle(only_angle)));
+                }
+            });
             // Add a angle breakdown if needed
             if angle_breakdown.len() > 1 {
                 ui.indent("", |ui| {
                     for (angle, edges) in angle_breakdown {
-                        ui.colored_label(
-                            color,
-                            format!("{}x {}", edges.len(), display_angle(angle)),
-                        );
+                        ui.label(format!("{}x {}", edges.len(), display_angle(angle)));
                     }
                 });
             }
