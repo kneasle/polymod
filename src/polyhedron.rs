@@ -1137,8 +1137,7 @@ impl Polyhedron {
     fn get_face_with_normal(&self, normal: Vec3) -> FaceIdx {
         let (idx, _face) = self
             .faces_enumerated()
-            .filter(|(_idx, f)| f.normal(&self).angle(normal) < Rad(0.01))
-            .next()
+            .find(|(_idx, f)| f.normal(self).angle(normal) < Rad(0.01))
             .unwrap();
         idx
     }
