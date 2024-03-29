@@ -17,9 +17,9 @@ use model::Model;
 
 mod model;
 mod model_tree;
-mod model_view;
 mod polyhedron;
 mod utils;
+mod viewport;
 
 const BIG_SPACE: f32 = 20.0;
 const SMALL_SPACE: f32 = 10.0;
@@ -43,7 +43,7 @@ fn main() {
     let mut show_external_angles = false;
 
     // Create model view
-    let mut view = model_view::ModelView::new(&context, window.viewport());
+    let mut view = viewport::Viewport::new(&context, window.viewport());
 
     // Main loop
     let mut gui = three_d::GUI::new(&context);

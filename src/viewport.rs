@@ -3,7 +3,7 @@ use std::ops::Deref;
 use three_d::*;
 
 /// The 3D viewport used to display a model
-pub(crate) struct ModelView {
+pub(crate) struct Viewport {
     context: Context,
 
     camera: Camera,
@@ -13,8 +13,8 @@ pub(crate) struct ModelView {
     wireframe_material: PhysicalMaterial,
 }
 
-impl ModelView {
-    pub fn new(context: &Context, viewport: Viewport) -> Self {
+impl Viewport {
+    pub fn new(context: &Context, viewport: three_d::Viewport) -> Self {
         // Camera
         let target = vec3(0.0f32, 0.0, 0.0);
         let scene_radius = 6.0f32;
@@ -62,7 +62,7 @@ impl ModelView {
         }
     }
 
-    pub fn update(&mut self, frame_input: &mut FrameInput, viewport: Viewport) -> bool {
+    pub fn update(&mut self, frame_input: &mut FrameInput, viewport: three_d::Viewport) -> bool {
         let mut redraw = frame_input.first_frame;
         redraw |= self.camera.set_viewport(viewport);
         redraw |= self
