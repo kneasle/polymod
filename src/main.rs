@@ -38,7 +38,7 @@ fn main() {
     let builtin_tree = ModelTree::builtin();
 
     let mut current_model_id = builtin_tree
-        .get_model_with_name("Apanar Deltahedron")
+        .get_model_with_name("Inset Truncated Dodecahedron")
         .unwrap()
         .id();
 

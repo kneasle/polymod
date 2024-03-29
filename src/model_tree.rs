@@ -362,6 +362,17 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
+            Model::new("Inset Truncated Dodecahedron", {
+                let mut poly = Polyhedron::truncated_dodecahedron();
+                let mut inner_face = FaceIdx::new(0);
+                for decagon in poly.ngons(10).collect_vec() {
+                    let next = poly.excavate_cupola(decagon, false);
+                    inner_face = poly.excavate_antiprism(next);
+                }
+                let inner = Polyhedron::dodecahedron();
+                poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+                poly
+            }),
             Model::new("Apanar Deltahedron", {
                 // Create a bicupola
                 let PrismLike {
