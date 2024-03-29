@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     f32::consts::PI,
     sync::atomic::{AtomicU32, Ordering},
 };
@@ -12,8 +11,8 @@ use three_d::{
 
 use crate::utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba};
 use crate::{
-    polyhedron::{Face, Polyhedron, VertIdx},
-    utils::{lerp_color, normalize_perpendicular_to, Side},
+    polyhedron::{Face, Polyhedron},
+    utils::{normalize_perpendicular_to, Side},
     SMALL_SPACE,
 };
 
@@ -23,12 +22,6 @@ pub struct Model {
 
     pub name: String,
     pub poly: Polyhedron,
-
-    // Indexed colors for each side of each edge.  If `edge_colors[(a, b)] = idx` then the side
-    // of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
-    // given the color at `color_index[idx]`.
-    half_edge_colors: HashMap<(VertIdx, VertIdx), ColorIdx>,
-    color_index: ColVec<egui::Rgba>,
 
     // Display settings
     view: ModelViewSettings,
@@ -42,8 +35,6 @@ impl Model {
             name: name.to_owned(),
             poly,
 
-            half_edge_colors: HashMap::default(),
-            color_index: ColVec::default(),
             view: ModelViewSettings::default(),
         }
     }
@@ -54,32 +45,6 @@ impl Model {
 
     pub fn set_id(&mut self, id: ModelId) {
         self.id = id;
-    }
-
-    pub fn add_color(&mut self, color: egui::Rgba) -> ColorIdx {
-        self.color_index.push(color)
-    }
-
-    pub fn set_full_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
-        self.set_half_edge_color(v1, v2, color);
-        self.set_half_edge_color(v2, v1, color);
-    }
-
-    pub fn set_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
-        self.half_edge_colors.insert((v1, v2), color);
-    }
-
-    pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
-        match self.half_edge_colors.get(&(a, b)) {
-            Some(idx) => self.color_index[*idx],
-            None => DEFAULT_COLOR,
-        }
-    }
-
-    pub fn mixed_edge_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
-        let left_color = self.edge_side_color(a, b);
-        let right_color = self.edge_side_color(b, a);
-        lerp_color(left_color, right_color, 0.5)
     }
 
     pub fn draw_view_gui(&mut self, ui: &mut egui::Ui) {
@@ -266,7 +231,6 @@ impl OwUnit {
 // RENDERING //
 ///////////////
 
-pub const DEFAULT_COLOR: egui::Rgba = egui::Rgba::from_rgb(0.4, 0.4, 0.4);
 const WIREFRAME_TINT: f32 = 0.3;
 const INSIDE_TINT: f32 = 0.5;
 
@@ -358,7 +322,7 @@ impl Model {
                 // For solid faces, just render the face as-is
                 FaceRenderStyle::Solid => {
                     let verts = face.vert_positions(&self.poly);
-                    faces_to_render.push((DEFAULT_COLOR, verts));
+                    faces_to_render.push((Polyhedron::DEFAULT_COLOR, verts));
                 }
                 // For ow-like faces, render up to two faces per edge
                 FaceRenderStyle::OwLike {
@@ -391,7 +355,7 @@ impl Model {
             .zip_eq(&in_directions);
         for (((i0, v0), in0), ((i1, v1), in1)) in verts_and_ins.circular_tuple_windows() {
             // Extract useful data
-            let edge_color = self.edge_side_color(*i0, *i1);
+            let edge_color = self.poly.edge_side_color(*i0, *i1);
             let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
 
             match fixed_angle {
@@ -488,7 +452,7 @@ impl Model {
         let mut transformations = Vec::new();
         for edge in self.poly.edges() {
             let color = darken_color(
-                self.mixed_edge_color(edge.bottom_vert, edge.top_vert),
+                self.poly.mixed_edge_color(edge.bottom_vert, edge.top_vert),
                 WIREFRAME_TINT,
             );
             colors.push(egui_color_to_srgba(color));
@@ -525,7 +489,7 @@ impl Model {
 
     fn vertex_instances(&self) -> Instances {
         let verts = &self.poly.vert_positions();
-        let color = egui_color_to_srgba(darken_color(DEFAULT_COLOR, WIREFRAME_TINT));
+        let color = egui_color_to_srgba(darken_color(Polyhedron::DEFAULT_COLOR, WIREFRAME_TINT));
         Instances {
             transformations: verts
                 .iter()
@@ -571,6 +535,3 @@ impl ModelId {
         Self(next_int)
     }
 }
-
-index_vec::define_index_type! { pub struct ColorIdx = usize; }
-pub type ColVec<T> = index_vec::IndexVec<ColorIdx, T>;

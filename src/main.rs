@@ -220,7 +220,7 @@ fn model_geom_gui(model: &Model, show_external_angles: &mut bool, ui: &mut egui:
                 let mut dihedral = Degrees::from(dihedral_angle).0;
                 dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
                                                                // Record this new edge
-                let col = model.edge_side_color(edge.bottom_vert, edge.top_vert);
+                let col = model.poly.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let edge_list: &mut Vec<&Edge> = edge_types
                     .entry((left_n.min(right_n), left_n.max(right_n), OrderedRgba(col)))
                     .or_default()

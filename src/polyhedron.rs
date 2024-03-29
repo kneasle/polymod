@@ -6,18 +6,24 @@ use std::{
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use three_d::{
-    vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4,
-    Zero,
+    egui, vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3,
+    Vec4, Zero,
 };
 
-use crate::utils::{lerp3, Side};
+use crate::utils::{lerp3, lerp_color, Side};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Polyhedron {
     verts: VertVec<Vec3>,
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Option<Face>>,
+
+    // Indexed colors for each side of each edge.  If `edge_colors[(a, b)] = idx` then the side
+    // of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
+    // given the color at `color_index[idx]`.
+    half_edge_colors: HashMap<(VertIdx, VertIdx), ColorIdx>,
+    color_index: ColVec<egui::Rgba>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -275,6 +281,7 @@ impl Polyhedron {
         let mut model = Self {
             verts: new_verts,
             faces: new_faces,
+            ..Default::default()
         };
         model.normalize_edge_length();
         model
@@ -371,6 +378,7 @@ impl Polyhedron {
         Self {
             verts: new_verts,
             faces: new_faces,
+            ..Default::default()
         }
     }
 
@@ -447,6 +455,7 @@ impl Polyhedron {
         Self {
             verts: new_verts,
             faces: new_faces,
+            ..Default::default()
         }
     }
 }
@@ -649,6 +658,7 @@ impl Polyhedron {
         let poly = Polyhedron {
             verts: new_verts,
             faces: new_faces,
+            ..Default::default()
         };
         PrismLike {
             top_face: poly.get_face_with_normal(Vec3::unit_y()),
@@ -872,7 +882,20 @@ impl Polyhedron {
         Self {
             verts: new_verts,
             faces: new_faces,
+            ..Default::default()
         }
+    }
+
+    pub fn color_edges_added_by<T>(
+        &mut self,
+        operation: impl FnOnce(&mut Self) -> T,
+        color: ColorIdx,
+    ) -> T {
+        let (edges_added, value) = self.get_edges_added_by(operation);
+        for (v1, v2) in edges_added {
+            self.set_full_edge_color(v1, v2, color);
+        }
+        value
     }
 
     /// Perform a given `operation`, and set the colours of any new edges to the given `colour`
@@ -889,7 +912,6 @@ impl Polyhedron {
                 edges_added.push((e.bottom_vert, e.top_vert));
             }
         }
-
         (edges_added, result)
     }
 
@@ -955,9 +977,42 @@ impl Polyhedron {
                 })
                 .map(Some)
                 .collect(),
+
+            half_edge_colors: HashMap::default(),
+            color_index: ColVec::default(),
         };
         m.make_centred();
         m
+    }
+
+    /* COLORS */
+
+    pub const DEFAULT_COLOR: egui::Rgba = egui::Rgba::from_rgb(0.4, 0.4, 0.4);
+
+    pub fn add_color(&mut self, color: egui::Rgba) -> ColorIdx {
+        self.color_index.push(color)
+    }
+
+    pub fn set_full_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
+        self.set_half_edge_color(v1, v2, color);
+        self.set_half_edge_color(v2, v1, color);
+    }
+
+    pub fn set_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
+        self.half_edge_colors.insert((v1, v2), color);
+    }
+
+    pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
+        match self.half_edge_colors.get(&(a, b)) {
+            Some(idx) => self.color_index[*idx],
+            None => Self::DEFAULT_COLOR,
+        }
+    }
+
+    pub fn mixed_edge_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
+        let left_color = self.edge_side_color(a, b);
+        let right_color = self.edge_side_color(b, a);
+        lerp_color(left_color, right_color, 0.5)
     }
 
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
@@ -1244,5 +1299,7 @@ fn transform_point(v: Vec3, matrix: Mat4) -> Vec3 {
 
 index_vec::define_index_type! { pub struct VertIdx = usize; }
 index_vec::define_index_type! { pub struct FaceIdx = usize; }
+index_vec::define_index_type! { pub struct ColorIdx = usize; }
 pub type VertVec<T> = index_vec::IndexVec<VertIdx, T>;
 pub type FaceVec<T> = index_vec::IndexVec<FaceIdx, T>;
+pub type ColVec<T> = index_vec::IndexVec<ColorIdx, T>;

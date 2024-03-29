@@ -362,7 +362,7 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
-            {
+            Model::new("Apanar Deltahedron", {
                 // Create a bicupola
                 let PrismLike {
                     mut poly,
@@ -374,25 +374,23 @@ impl ModelTree {
                     .faces_enumerated()
                     .map(|(idx, _face)| idx)
                     .collect_vec();
-                // Dig tunnel
-                let (edges_to_color, _) = poly.get_edges_added_by(|poly| {
-                    poly.excavate_antiprism(bottom_face);
-                    poly.excavate_antiprism(top_face);
-                });
+                // Dig tunnel, and colour it blue
+                let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
+                poly.color_edges_added_by(
+                    |poly| {
+                        poly.excavate_antiprism(bottom_face);
+                        poly.excavate_antiprism(top_face);
+                    },
+                    blue,
+                );
                 // Add pyramids to all faces in the bicupola which still exist
                 for face in faces_to_add_pyramids {
                     if poly.is_face(face) {
                         poly.extend_pyramid(face);
                     }
                 }
-                // Create the model, and color the edges
-                let mut model = Model::new("Apanar Deltahedron", poly);
-                let blue = model.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
-                for (v1, v2) in edges_to_color {
-                    model.set_full_edge_color(v1, v2, blue);
-                }
-                model
-            },
+                poly
+            }),
         ];
         Self::new_group("Toroids", toroids)
     }
