@@ -44,6 +44,14 @@ impl Face {
         self.verts.len()
     }
 
+    pub fn centroid(&self, polyhedron: &Polyhedron) -> Vec3 {
+        let mut total = Vec3::zero();
+        for v in &self.verts {
+            total += polyhedron.verts[*v];
+        }
+        total / self.verts.len() as f32
+    }
+
     pub fn is_regular(&self, polyhedron: &Polyhedron) -> bool {
         let expected_angle = Rad::full_turn() / self.order() as f32;
         for (v1, v2, v3) in self
@@ -1150,12 +1158,7 @@ impl Polyhedron {
     }
 
     pub fn face_centroid(&self, face: FaceIdx) -> Vec3 {
-        let verts = &self.get_face(face).verts;
-        let mut total = Vec3::zero();
-        for v in verts {
-            total += self.verts[*v];
-        }
-        total / verts.len() as f32
+        self.get_face(face).centroid(self)
     }
 
     pub fn face_order(&self, face: FaceIdx) -> usize {

@@ -331,10 +331,18 @@ impl Model {
         for face in self.polyhedron.faces() {
             // Decide how to render them, according to the style
             match style {
-                // For solid faces, just render the face as-is
+                // For solid faces, render the face as a set of triangles
                 FaceRenderStyle::Solid => {
-                    let verts = face.vert_positions(&self.polyhedron);
-                    faces_to_render.push((Polyhedron::DEFAULT_COLOR, verts));
+                    let centroid = face.centroid(&self.polyhedron);
+                    for (v1, v2) in face.verts().iter().circular_tuple_windows() {
+                        let verts = vec![
+                            centroid,
+                            self.polyhedron.vert_pos(*v1),
+                            self.polyhedron.vert_pos(*v2),
+                        ];
+                        let color = self.polyhedron.edge_side_color(*v2, *v1);
+                        faces_to_render.push((color, verts));
+                    }
                 }
                 // For ow-like faces, render up to two faces per edge
                 FaceRenderStyle::OwLike {
