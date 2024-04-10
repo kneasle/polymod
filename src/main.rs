@@ -120,7 +120,7 @@ fn main() {
                                 ui.heading("Properties");
                                 model_properties_gui(current_model.polyhedron(), ui);
                                 ui.add_space(SMALL_SPACE);
-                                ui.heading("Geometry");
+                                ui.heading("Geometry Breakdown");
                                 model_geom_gui(
                                     current_model.polyhedron(),
                                     &mut show_external_angles,
@@ -199,7 +199,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
         for (n, faces) in faces_by_ngon.iter().sorted_by_key(|(n, _)| *n) {
             let count = faces.len();
             ui.label(format!(
-                "{} {}{}",
+                "{}x {}{}",
                 count,
                 ngon_name(*n),
                 if count > 1 { "s" } else { "" }
@@ -247,7 +247,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
     ui.strong(format!("{} edges", edges.len()));
     ui.indent("edges", |ui| {
         if num_open_edges > 0 {
-            ui.label(format!("{num_open_edges} open"));
+            ui.label(format!("{num_open_edges}x open"));
         }
         let display_angle = |a: OrderedFloat<f32>| -> String {
             let mut angle = a.0;
@@ -264,7 +264,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 // Count
-                ui.label(format!("{} ", num_edges));
+                ui.label(format!("{}x ", num_edges));
                 // Ngon pair (e.g. "triangle-decagon")
                 ui.colored_label(col1, ngon_name(n1));
                 ui.label("-");
@@ -272,7 +272,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
                 // Angle
                 if angle_breakdown.len() == 1 {
                     let only_angle = *angle_breakdown.keys().next().unwrap();
-                    ui.label(format!(" ({})", display_angle(only_angle)));
+                    ui.label(format!(" (all {})", display_angle(only_angle)));
                 }
             });
             // Add a angle breakdown if needed
