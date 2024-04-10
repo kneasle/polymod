@@ -38,8 +38,8 @@ fn main() {
     let builtin_tree = ModelTree::builtin();
 
     let mut current_model_id = builtin_tree
-        .get_model_with_name("Prism-Extended Cuboctahedron")
-        .unwrap()
+        .get_model_with_name("Christopher")
+        .expect("No model with this name found")
         .id();
 
     // GUI variables

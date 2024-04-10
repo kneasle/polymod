@@ -410,10 +410,7 @@ impl ModelTree {
                 }
                 poly
             }),
-            Model::new(
-                "Prism-Extended Cuboctahedron",
-                prism_extended_cuboctahedron(),
-            ),
+            Model::new("Christopher", prism_extended_cuboctahedron()),
         ];
         Self::new_group("Toroids", toroids)
     }
