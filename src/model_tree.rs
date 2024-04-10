@@ -156,10 +156,14 @@ impl ModelTree {
             Model::new("4-Prism = Cube", Polyhedron::prism(4).poly),
             Model::new("5-Prism", Polyhedron::prism(5).poly),
             Model::new("6-Prism", Polyhedron::prism(6).poly),
+            Model::new("7-Prism", Polyhedron::prism(7).poly),
+            Model::new("8-Prism", Polyhedron::prism(8).poly),
             Model::new("3-Antiprism = Octahedron", Polyhedron::antiprism(3).poly),
             Model::new("4-Antiprism", Polyhedron::antiprism(4).poly),
             Model::new("5-Antiprism", Polyhedron::antiprism(5).poly),
             Model::new("6-Antiprism", Polyhedron::antiprism(6).poly),
+            Model::new("7-Antiprism", Polyhedron::antiprism(7).poly),
+            Model::new("8-Antiprism", Polyhedron::antiprism(8).poly),
         ];
 
         Self::Group {
