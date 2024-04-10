@@ -1248,6 +1248,19 @@ impl Polyhedron {
         }
         total / self.verts.len() as f32
     }
+
+    /// Returns the radius of the smallest sphere which fits entirely around this `Polyhedron`.
+    ///
+    /// Note: currently this returns the smallest sphere centred around the centroid, which is
+    /// usually the same for high-symmetry models but may not always be the smallest sphere.
+    pub fn outsphere_radius(&self) -> f32 {
+        let centroid = self.centroid();
+        self.verts
+            .iter()
+            .map(|v| v.distance(centroid))
+            .reduce(f32::max)
+            .unwrap_or(0.0)
+    }
 }
 
 #[derive(Debug, Clone)]
