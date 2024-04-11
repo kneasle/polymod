@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use polyhedron::Polyhedron;
+use polyhedron::{EdgeAngleType, FaceIdx, Polyhedron, VertIdx};
 use three_d::{egui::RichText, *};
 use utils::OrderedRgba;
 
@@ -245,17 +245,17 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
     let mut edge_types = BTreeMap::<EdgeFaceType, BTreeMap<EdgeSubType, Vec<&Edge>>>::new();
     for edge in &edges {
         match edge.closed {
-            Some(ClosedEdgeData {
-                left_face,
-                dihedral_angle,
-            }) => {
+            Some(ClosedEdgeData { left_face, .. }) => {
+                // Get face data
                 let left_n = poly.face_order(left_face);
                 let right_n = poly.face_order(edge.right_face);
                 let col_left = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let col_right = poly.edge_side_color(edge.top_vert, edge.bottom_vert);
-                // Record this new edge
+                // Categorise this new edge
                 let face_type = EdgeFaceType::new(left_n, right_n, col_left, col_right);
-                let sub_type = EdgeSubType::new(dihedral_angle);
+                let are_faces_same = (left_n, col_left) == (right_n, col_right);
+                let sub_type = EdgeSubType::new(edge, are_faces_same, poly, &edges);
+                // Add this new edge to its corresponding category
                 let edge_list: &mut Vec<&Edge> = edge_types
                     .entry(face_type)
                     .or_default()
@@ -345,14 +345,58 @@ impl EdgeFaceType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct EdgeSubType {
     dihedral_angle: OrderedFloat<f32>,
+    left_type: EdgeAngleType,
+    spine_type: EdgeAngleType,
+    right_type: EdgeAngleType,
 }
 
 impl EdgeSubType {
-    fn new(dihedral_angle: impl Into<Degrees>) -> Self {
-        let mut dihedral = dihedral_angle.into().0;
-        dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
+    fn new(edge: &Edge, are_faces_identical: bool, poly: &Polyhedron, edges: &[Edge]) -> Self {
+        // Round dihedral angle
+        let mut dihedral = Degrees::from(edge.dihedral_angle().unwrap()).0;
+        dihedral = (dihedral * 128.0).round() / 128.0;
+
+        let edge_angle_type = |face_idx: FaceIdx, vert_idx: VertIdx| -> EdgeAngleType {
+            // Find the next vertex round the face
+            let face = poly.get_face(face_idx);
+            let (_, other_vert) = face
+                .verts()
+                .iter()
+                .circular_tuple_windows()
+                .find(|(v1, _v2)| **v1 == vert_idx)
+                .unwrap();
+            // Find the edge going between `vert_idx` and `other_vert`
+            let edge = edges
+                .iter()
+                .find(|e| e.has_verts(vert_idx, *other_vert))
+                .unwrap();
+            edge.angle_type()
+        };
+
+        let mut left_face = edge.closed.as_ref().unwrap().left_face;
+        let mut right_face = edge.right_face;
+        let mut left_vert = edge.bottom_vert;
+        let mut right_vert = edge.top_vert;
+        // Normalize face display order, so that the smaller face is always on the left
+        if poly.face_order(left_face) > poly.face_order(right_face) {
+            std::mem::swap(&mut left_face, &mut right_face);
+            std::mem::swap(&mut left_vert, &mut right_vert);
+        }
+
+        // Get left/right angle types
+        let mut left_type = edge_angle_type(left_face, left_vert);
+        let mut right_type = edge_angle_type(right_face, right_vert);
+        // If both faces have the same order, then normalize the angle types
+        if are_faces_identical && left_type > right_type {
+            std::mem::swap(&mut left_type, &mut right_type);
+        }
+
         Self {
             dihedral_angle: OrderedFloat(dihedral),
+
+            left_type,
+            spine_type: edge.angle_type(),
+            right_type,
         }
     }
 
@@ -361,6 +405,12 @@ impl EdgeSubType {
         if show_external_angles {
             angle = 360.0 - angle;
         }
-        format!("{:.2}°", angle)
+        format!(
+            "{}{}{} @ {:.2}°",
+            self.left_type.as_char(),
+            self.spine_type.as_char(),
+            self.right_type.as_char(),
+            angle,
+        )
     }
 }

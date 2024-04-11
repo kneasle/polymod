@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
     f32::consts::PI,
 };
@@ -1295,6 +1296,23 @@ impl Edge {
         self.closed.as_ref().map(|c| c.dihedral_angle)
     }
 
+    pub fn angle_type(&self) -> EdgeAngleType {
+        let half_turn = Radians::full_turn() / 2.0;
+        match self.dihedral_angle() {
+            Some(angle) => match angle.partial_cmp(&half_turn).unwrap() {
+                Ordering::Less => EdgeAngleType::Convex,
+                Ordering::Equal => EdgeAngleType::Planar,
+                Ordering::Greater => EdgeAngleType::Concave,
+            },
+            None => EdgeAngleType::Open,
+        }
+    }
+
+    pub fn has_verts(&self, v1: VertIdx, v2: VertIdx) -> bool {
+        (self.top_vert == v1 && self.bottom_vert == v2)
+            || (self.top_vert == v2 && self.bottom_vert == v1)
+    }
+
     fn add_left_face(
         &mut self,
         v1: VertIdx,
@@ -1325,6 +1343,25 @@ impl Edge {
             dihedral = Radians::full_turn() - dihedral;
         }
         dihedral
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum EdgeAngleType {
+    Convex,
+    Planar,
+    Concave,
+    Open,
+}
+
+impl EdgeAngleType {
+    pub fn as_char(self) -> char {
+        match self {
+            EdgeAngleType::Convex => 'v',
+            EdgeAngleType::Planar => 'p',
+            EdgeAngleType::Concave => 'c',
+            EdgeAngleType::Open => '-',
+        }
     }
 }
 
