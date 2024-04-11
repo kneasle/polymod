@@ -220,10 +220,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
     ui.add_space(SMALL_SPACE);
     let edges = poly.edges();
     let mut num_open_edges = 0;
-    let mut edge_types = BTreeMap::<
-        ((usize, OrderedRgba), (usize, OrderedRgba)),
-        BTreeMap<OrderedFloat<f32>, Vec<&Edge>>,
-    >::new();
+    let mut edge_types = BTreeMap::<EdgeFaceType, BTreeMap<EdgeSubType, Vec<&Edge>>>::new();
     for edge in &edges {
         match edge.closed {
             Some(ClosedEdgeData {
@@ -232,21 +229,15 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
             }) => {
                 let left_n = poly.face_order(left_face);
                 let right_n = poly.face_order(edge.right_face);
-                let mut dihedral = Degrees::from(dihedral_angle).0;
-                dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
-
                 let col_left = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let col_right = poly.edge_side_color(edge.top_vert, edge.bottom_vert);
-                let mut left = (left_n, OrderedRgba(col_left));
-                let mut right = (right_n, OrderedRgba(col_right));
-                if left > right {
-                    std::mem::swap(&mut left, &mut right);
-                }
                 // Record this new edge
+                let face_type = EdgeFaceType::new(left_n, right_n, col_left, col_right);
+                let sub_type = EdgeSubType::new(dihedral_angle);
                 let edge_list: &mut Vec<&Edge> = edge_types
-                    .entry((left, right))
+                    .entry(face_type)
                     .or_default()
-                    .entry(OrderedFloat(dihedral))
+                    .entry(sub_type)
                     .or_default();
                 edge_list.push(edge)
             }
@@ -258,15 +249,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
         if num_open_edges > 0 {
             ui.label(format!("{num_open_edges}x open"));
         }
-        let display_angle = |a: OrderedFloat<f32>| -> String {
-            let mut angle = a.0;
-            if *show_external_angles {
-                angle = 360.0 - angle;
-            }
-            format!("{:.2}°", angle)
-        };
-        for (key, angle_breakdown) in edge_types {
-            let ((n1, OrderedRgba(col1)), (n2, OrderedRgba(col2))) = key;
+        for (face_type, angle_breakdown) in edge_types {
             assert!(!angle_breakdown.is_empty());
             let num_edges = angle_breakdown.values().map(Vec::len).sum::<usize>();
             // Display overall group (e.g. "60 triangle-pentagon (152.0°)")
@@ -275,20 +258,24 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
                 // Count
                 ui.label(format!("{}x ", num_edges));
                 // Ngon pair (e.g. "triangle-decagon")
-                ui.colored_label(col1, ngon_name(n1));
+                ui.colored_label(face_type.left_color.0, ngon_name(face_type.left_order));
                 ui.label("-");
-                ui.colored_label(col2, ngon_name(n2));
+                ui.colored_label(face_type.right_color.0, ngon_name(face_type.right_order));
                 // Angle
                 if angle_breakdown.len() == 1 {
-                    let only_angle = *angle_breakdown.keys().next().unwrap();
-                    ui.label(format!(" (all {})", display_angle(only_angle)));
+                    let sub_type = *angle_breakdown.keys().next().unwrap();
+                    ui.label(format!(" (all {})", sub_type.show(*show_external_angles)));
                 }
             });
             // Add a angle breakdown if needed
             if angle_breakdown.len() > 1 {
                 ui.indent("", |ui| {
-                    for (angle, edges) in angle_breakdown {
-                        ui.label(format!("{}x {}", edges.len(), display_angle(angle)));
+                    for (sub_type, edges) in angle_breakdown {
+                        ui.label(format!(
+                            "{}x {}",
+                            edges.len(),
+                            sub_type.show(*show_external_angles),
+                        ));
                     }
                 });
             }
@@ -299,4 +286,59 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
     // Vertices
     ui.add_space(SMALL_SPACE);
     ui.strong(format!("{} vertices", poly.vert_positions().len()));
+}
+
+/// Top-level edge classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct EdgeFaceType {
+    left_order: usize,
+    right_order: usize,
+    left_color: OrderedRgba,
+    right_color: OrderedRgba,
+}
+
+impl EdgeFaceType {
+    /// Create a new `EdgeFaceType`, ensuring that left < right
+    fn new(
+        left_order: usize,
+        right_order: usize,
+        left_color: egui::Rgba,
+        right_color: egui::Rgba,
+    ) -> Self {
+        let mut left = (left_order, OrderedRgba(left_color));
+        let mut right = (right_order, OrderedRgba(right_color));
+        if left > right {
+            std::mem::swap(&mut left, &mut right);
+        }
+        Self {
+            left_order: left.0,
+            right_order: right.0,
+            left_color: left.1,
+            right_color: right.1,
+        }
+    }
+}
+
+/// Second-level edge classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct EdgeSubType {
+    dihedral_angle: OrderedFloat<f32>,
+}
+
+impl EdgeSubType {
+    fn new(dihedral_angle: impl Into<Degrees>) -> Self {
+        let mut dihedral = dihedral_angle.into().0;
+        dihedral = (dihedral * 128.0).round() / 128.0; // Round dihedral angle
+        Self {
+            dihedral_angle: OrderedFloat(dihedral),
+        }
+    }
+
+    fn show(self, show_external_angles: bool) -> String {
+        let mut angle = self.dihedral_angle.0;
+        if show_external_angles {
+            angle = 360.0 - angle;
+        }
+        format!("{:.2}°", angle)
+    }
 }

@@ -59,7 +59,7 @@ pub fn egui_color_to_srgba(c: egui::Rgba) -> Srgba {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct OrderedRgba(pub egui::Rgba);
 
 impl OrderedRgba {
