@@ -105,6 +105,7 @@ pub enum OwUnit {
     Deg60,
     SturdyEdgeModule90,
     CustomDeg90,
+    CustomDeg108,
     Deg120,
     Deg135,
 }
@@ -223,10 +224,11 @@ pub struct OwUnitGeometry {
 }
 
 impl OwUnit {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         OwUnit::Deg60,
         OwUnit::SturdyEdgeModule90,
         OwUnit::CustomDeg90,
+        OwUnit::CustomDeg108,
         OwUnit::Deg120,
         OwUnit::Deg135,
     ];
@@ -237,14 +239,16 @@ impl OwUnit {
         // Derived from folding patterns:
         // - https://owrigami.com/show_diagram.php?diagram=120
         // - https://owrigami.com/show_diagram.php?diagram=135
+        const DEG_108_REDUCTION: f32 = 0.72654253; // 1.0 * tan(36 deg)
         const DEG_120_REDUCTION: f32 = 0.8660254; // 1.5 * tan(30 deg)
-        const DEG_135_REDUCTION: f32 = 0.82842714; // 2 * tan(22.5 deg)
+        const DEG_135_REDUCTION: f32 = 0.82842714; // 2.0 * tan(22.5 deg)
 
         // Reduction factor is a multiple of 1/4 of the paper's height
         let (reduction_factor, full_angle) = match self {
             OwUnit::Deg60 => (0.0, Deg(60.0)),
             OwUnit::SturdyEdgeModule90 => (0.5, Deg(90.0)),
             OwUnit::CustomDeg90 => (1.0, Deg(90.0)),
+            OwUnit::CustomDeg108 => (DEG_108_REDUCTION, Deg(108.0)),
             OwUnit::Deg120 => (DEG_120_REDUCTION, Deg(120.0)),
             OwUnit::Deg135 => (DEG_135_REDUCTION, Deg(135.0)),
         };
@@ -262,6 +266,7 @@ impl OwUnit {
             OwUnit::Deg60 => "Ow's 60° unit",
             OwUnit::SturdyEdgeModule90 => "StEM (90°)",
             OwUnit::CustomDeg90 => "Custom 90° unit",
+            OwUnit::CustomDeg108 => "Custom 108° unit",
             OwUnit::Deg120 => "Ow's 120° unit",
             OwUnit::Deg135 => "Ow's 135° unit",
         }

@@ -1398,6 +1398,7 @@ impl EdgeId {
         self.v2
     }
 
+    #[allow(dead_code)]
     pub fn verts(self) -> (VertIdx, VertIdx) {
         (self.v1, self.v2)
     }
