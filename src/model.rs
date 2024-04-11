@@ -493,19 +493,23 @@ impl Model {
             .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
             .unwrap();
 
-        let edges = if self.view_settings.wireframe_edges {
-            self.edge_instances(edges_to_highlight)
-        } else {
-            Instances::default()
-        };
+        let edges = self.edge_instances(self.view_settings.wireframe_edges, edges_to_highlight);
         InstancedMesh::new(context, &edges, &cylinder)
     }
 
-    fn edge_instances(&self, edges_to_highlight: &HashSet<EdgeId>) -> Instances {
+    fn edge_instances(
+        &self,
+        show_wireframe: bool,
+        edges_to_highlight: &HashSet<EdgeId>,
+    ) -> Instances {
         let mut colors = Vec::new();
         let mut transformations = Vec::new();
         for edge in self.polyhedron.edges() {
             let is_highlighted = edges_to_highlight.contains(&edge.id());
+            if !(show_wireframe || is_highlighted) {
+                continue;
+            }
+
             let edge_color = self
                 .polyhedron
                 .mixed_edge_color(edge.bottom_vert, edge.top_vert);
