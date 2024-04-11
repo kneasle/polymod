@@ -24,7 +24,7 @@ pub struct Model {
     polyhedron: Polyhedron,
 
     // Display settings
-    view: ModelViewSettings,
+    view_settings: ModelViewSettings,
 }
 
 impl Model {
@@ -35,7 +35,7 @@ impl Model {
             name: name.to_owned(),
             polyhedron: poly,
 
-            view: ModelViewSettings::default(),
+            view_settings: ModelViewSettings::default(),
         }
     }
 
@@ -59,8 +59,12 @@ impl Model {
         self.id = id;
     }
 
+    pub fn view_settings(&self) -> &ModelViewSettings {
+        &self.view_settings
+    }
+
     pub fn draw_view_gui(&mut self, ui: &mut egui::Ui) {
-        self.view.gui(ui);
+        self.view_settings.gui(ui);
     }
 }
 
@@ -130,21 +134,32 @@ impl ModelViewSettings {
             },
             ModelViewStyle::OwLikeAngled => {
                 // Model the geometry of the unit
-                let paper_aspect = self.paper_ratio_h as f32 / self.paper_ratio_w as f32;
-                let (length_reduction, unit_angle) = self.unit.geometry(paper_aspect);
-                let unit_spine_length = 1.0 - length_reduction * 2.0;
+                let OwUnitGeometry {
+                    paper_aspect,
+                    spine_length_factor: spine_length,
+                    angle,
+                } = self.ow_unit_geometry().unwrap();
                 let unit_width = paper_aspect / 4.0;
                 // Construct unit info
                 FaceRenderStyle::OwLike {
-                    side_ratio: unit_width / unit_spine_length,
+                    side_ratio: unit_width / spine_length,
                     fixed_angle: Some(FixedAngle {
-                        unit_angle,
+                        angle,
                         push_direction: self.direction,
                         add_crinkle: self.add_crinkle,
                     }),
                 }
             }
         })
+    }
+
+    pub fn ow_unit_geometry(&self) -> Option<OwUnitGeometry> {
+        (self.style == ModelViewStyle::OwLikeAngled)
+            .then(|| self.unit.geometry(self.paper_aspect_ratio()))
+    }
+
+    fn paper_aspect_ratio(&self) -> f32 {
+        self.paper_ratio_h as f32 / self.paper_ratio_w as f32
     }
 
     pub fn gui(&mut self, ui: &mut egui::Ui) {
@@ -196,6 +211,13 @@ impl ModelViewSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct OwUnitGeometry {
+    pub paper_aspect: f32,
+    pub spine_length_factor: f32, // As a factor of paper width
+    pub angle: Degrees,
+}
+
 impl OwUnit {
     const ALL: [Self; 5] = [
         OwUnit::Deg60,
@@ -206,11 +228,8 @@ impl OwUnit {
     ];
 
     /// If this `unit` is folded from paper with an aspect ratio of `paper_aspect`, what is the
-    /// `(width reduction, unit angle)` of this unit
-    ///
-    /// Note: the length perpendicular to the model's edge is `paper_aspect` times that of the length
-    /// parallel to the model's edge.
-    pub fn geometry(self, paper_aspect: f32) -> (f32, Degrees) {
+    /// `(spine length, unit angle)` of this unit
+    pub fn geometry(self, paper_aspect: f32) -> OwUnitGeometry {
         // Derived from folding patterns:
         // - https://owrigami.com/show_diagram.php?diagram=120
         // - https://owrigami.com/show_diagram.php?diagram=135
@@ -218,14 +237,20 @@ impl OwUnit {
         const DEG_135_REDUCTION: f32 = 0.82842714; // 2 * tan(22.5 deg)
 
         // Reduction factor is a multiple of 1/4 of the paper's height
-        let (reduction_factor, angle) = match self {
+        let (reduction_factor, full_angle) = match self {
             OwUnit::Deg60 => (0.0, Deg(60.0)),
             OwUnit::SturdyEdgeModule90 => (0.5, Deg(90.0)),
             OwUnit::CustomDeg90 => (1.0, Deg(90.0)),
             OwUnit::Deg120 => (DEG_120_REDUCTION, Deg(120.0)),
             OwUnit::Deg135 => (DEG_135_REDUCTION, Deg(135.0)),
         };
-        (paper_aspect * 0.25 * reduction_factor, angle / 2.0)
+        let length_reduction = paper_aspect * 0.25 * reduction_factor;
+        let spine_length = 1.0 - length_reduction * 2.0;
+        OwUnitGeometry {
+            paper_aspect,
+            spine_length_factor: spine_length,
+            angle: full_angle / 2.0,
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -278,14 +303,14 @@ pub enum FaceRenderStyle {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FixedAngle {
-    pub unit_angle: Degrees,
+    pub angle: Degrees,
     pub push_direction: Side,
     pub add_crinkle: bool,
 }
 
 impl Model {
     pub fn face_mesh(&self) -> Option<CpuMesh> {
-        let style = self.view.face_render_style()?;
+        let style = self.view_settings.face_render_style()?;
         Some(self.face_mesh_with_style(style))
     }
 
@@ -384,7 +409,7 @@ impl Model {
                 None => add_face(vec![v0, v1, v1 + in1 * side_ratio, v0 + in0 * side_ratio]),
                 Some(angle) => {
                     let FixedAngle {
-                        unit_angle,
+                        angle: unit_angle,
                         push_direction,
                         add_crinkle,
                     } = angle;
@@ -459,7 +484,7 @@ impl Model {
             .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
             .unwrap();
 
-        let edges = if self.view.wireframe_edges {
+        let edges = if self.view_settings.wireframe_edges {
             self.edge_instances()
         } else {
             Instances::default()
@@ -493,14 +518,14 @@ impl Model {
     /* VERTICES */
 
     pub fn vertex_mesh(&self, context: &three_d::Context) -> InstancedMesh {
-        let radius = match self.view.wireframe_verts {
+        let radius = match self.view_settings.wireframe_verts {
             true => VERTEX_RADIUS,
             false => EDGE_RADIUS,
         };
         let mut sphere = CpuMesh::sphere(8);
         sphere.transform(&Mat4::from_scale(radius)).unwrap();
 
-        let verts = if self.view.wireframe_edges || self.view.wireframe_verts {
+        let verts = if self.view_settings.wireframe_edges || self.view_settings.wireframe_verts {
             self.vertex_instances()
         } else {
             Instances::default()

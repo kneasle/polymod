@@ -13,7 +13,7 @@ use crate::{
     utils::ngon_name,
 };
 
-use model::Model;
+use model::{Model, ModelViewSettings};
 
 mod model;
 mod model_tree;
@@ -44,6 +44,7 @@ fn main() {
 
     // GUI variables
     let mut show_external_angles = false;
+    let mut paper_width = 7.5; // cm
 
     // Create model view
     let mut view = viewport::Viewport::new(&context, window.viewport());
@@ -118,7 +119,12 @@ fn main() {
 
                                 let current_model = current_model!();
                                 ui.heading("Properties");
-                                model_properties_gui(current_model.polyhedron(), ui);
+                                model_properties_gui(
+                                    current_model.polyhedron(),
+                                    current_model.view_settings(),
+                                    &mut paper_width,
+                                    ui,
+                                );
                                 ui.add_space(SMALL_SPACE);
                                 ui.heading("Geometry Breakdown");
                                 model_geom_gui(
@@ -160,7 +166,12 @@ fn main() {
     });
 }
 
-fn model_properties_gui(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
+fn model_properties_gui(
+    polyhedron: &Polyhedron,
+    view_settings: &ModelViewSettings,
+    paper_width: &mut f32,
+    ui: &mut egui::Ui,
+) {
     // Faces
     let all_flat = polyhedron.faces().all(|f| f.is_flat(polyhedron));
     let all_regular = polyhedron.faces().all(|f| f.is_regular(polyhedron));
@@ -183,9 +194,22 @@ fn model_properties_gui(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
 
     // Size
     let r = polyhedron.outsphere_radius();
-    ui.strong("Outsphere size:");
+    ui.strong("Outsphere diameter:");
     ui.indent("blah blah blah", |ui| {
-        ui.label(format!("As edge lengths: r = {:.2}; d = {:.2}", r, r * 2.0));
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.label(format!("{:.2} edge lengths", r * 2.0));
+            if let Some(geom) = view_settings.ow_unit_geometry() {
+                let real_diameter = r * 2.0 * geom.spine_length_factor * *paper_width;
+                ui.label(format!(", or {:.2}cm if folded from ", real_diameter));
+                ui.add(
+                    egui::DragValue::new(paper_width)
+                        .fixed_decimals(1)
+                        .speed(0.05),
+                );
+                ui.label(format!("x{:.2}cm paper.", *paper_width * geom.paper_aspect));
+            }
+        });
     });
 }
 
