@@ -183,12 +183,10 @@ fn model_properties_gui(polyhedron: &Polyhedron, ui: &mut egui::Ui) {
 
     // Size
     let r = polyhedron.outsphere_radius();
-    ui.strong("Outsphere size");
-    ui.label(format!(
-        "As multiple of edge length: r = {:.2}; d = {:.2}",
-        r,
-        r * 2.0
-    ));
+    ui.strong("Outsphere size:");
+    ui.indent("blah blah blah", |ui| {
+        ui.label(format!("As edge lengths: r = {:.2}; d = {:.2}", r, r * 2.0));
+    });
 }
 
 fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
