@@ -1,6 +1,8 @@
-use std::ops::Deref;
+use std::{collections::HashSet, ops::Deref};
 
 use three_d::*;
+
+use crate::polyhedron::EdgeId;
 
 /// The 3D viewport used to display a model
 pub(crate) struct Viewport {
@@ -71,7 +73,12 @@ impl Viewport {
         redraw
     }
 
-    pub fn render(&mut self, model: &crate::Model, target: &RenderTarget) {
+    pub fn render(
+        &mut self,
+        model: &crate::Model,
+        edges_to_highlight: &HashSet<EdgeId>,
+        target: &RenderTarget,
+    ) {
         // Lights
         let ambient = AmbientLight::new(&self.context, 0.7, Srgba::WHITE);
         let directional0 =
@@ -88,7 +95,7 @@ impl Viewport {
             meshes.push(Box::new(Gm::new(mesh, &self.face_material)));
         }
         meshes.push(Box::new(Gm::new(
-            model.edge_mesh(&self.context),
+            model.edge_mesh(&self.context, edges_to_highlight),
             &self.wireframe_material,
         )));
         meshes.push(Box::new(Gm::new(

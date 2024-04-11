@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     f32::consts::PI,
     sync::atomic::{AtomicU32, Ordering},
 };
@@ -9,7 +10,10 @@ use three_d::{
     Positions, Quat, Rad, Radians, Vec3,
 };
 
-use crate::utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba};
+use crate::{
+    polyhedron::EdgeId,
+    utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba, lerp_color},
+};
 use crate::{
     polyhedron::{Face, Polyhedron},
     utils::{normalize_perpendicular_to, Side},
@@ -269,6 +273,7 @@ impl OwUnit {
 ///////////////
 
 const WIREFRAME_TINT: f32 = 0.3;
+const HIGHLIGHT_BRIGHTNESS: f32 = 0.8;
 const INSIDE_TINT: f32 = 0.5;
 
 const EDGE_RADIUS: f32 = 0.03;
@@ -478,29 +483,36 @@ impl Model {
 
     /* EDGES */
 
-    pub fn edge_mesh(&self, context: &three_d::Context) -> InstancedMesh {
+    pub fn edge_mesh(
+        &self,
+        context: &three_d::Context,
+        edges_to_highlight: &HashSet<EdgeId>,
+    ) -> InstancedMesh {
         let mut cylinder = CpuMesh::cylinder(10);
         cylinder
             .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
             .unwrap();
 
         let edges = if self.view_settings.wireframe_edges {
-            self.edge_instances()
+            self.edge_instances(edges_to_highlight)
         } else {
             Instances::default()
         };
         InstancedMesh::new(context, &edges, &cylinder)
     }
 
-    fn edge_instances(&self) -> Instances {
+    fn edge_instances(&self, edges_to_highlight: &HashSet<EdgeId>) -> Instances {
         let mut colors = Vec::new();
         let mut transformations = Vec::new();
         for edge in self.polyhedron.edges() {
-            let color = darken_color(
-                self.polyhedron
-                    .mixed_edge_color(edge.bottom_vert, edge.top_vert),
-                WIREFRAME_TINT,
-            );
+            let is_highlighted = edges_to_highlight.contains(&edge.id());
+            let edge_color = self
+                .polyhedron
+                .mixed_edge_color(edge.bottom_vert, edge.top_vert);
+            let color = match is_highlighted {
+                true => lerp_color(edge_color, egui::Rgba::WHITE, HIGHLIGHT_BRIGHTNESS),
+                false => darken_color(edge_color, WIREFRAME_TINT),
+            };
             colors.push(egui_color_to_srgba(color));
             transformations.push(edge_transform(
                 self.polyhedron.vert_pos(edge.bottom_vert),

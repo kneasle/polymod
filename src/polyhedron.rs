@@ -916,8 +916,8 @@ impl Polyhedron {
         color: ColorIdx,
     ) -> T {
         let (edges_added, value) = self.get_edges_added_by(operation);
-        for (v1, v2) in edges_added {
-            self.set_full_edge_color(v1, v2, color);
+        for e in edges_added {
+            self.set_full_edge_color(e, color);
         }
         value
     }
@@ -926,14 +926,14 @@ impl Polyhedron {
     pub fn get_edges_added_by<T>(
         &mut self,
         operation: impl FnOnce(&mut Self) -> T,
-    ) -> (Vec<(VertIdx, VertIdx)>, T) {
+    ) -> (Vec<EdgeId>, T) {
         let first_new_vert_idx = self.verts.len_idx();
         let result = operation(self);
         // Colour any edges which contain one or more new vertex
         let mut edges_added = Vec::new();
         for e in self.edges() {
             if e.top_vert >= first_new_vert_idx || e.bottom_vert >= first_new_vert_idx {
-                edges_added.push((e.bottom_vert, e.top_vert));
+                edges_added.push(EdgeId::new(e.bottom_vert, e.top_vert));
             }
         }
         (edges_added, result)
@@ -1024,9 +1024,9 @@ impl Polyhedron {
         }
     }
 
-    pub fn set_full_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
-        self.set_half_edge_color(v1, v2, color);
-        self.set_half_edge_color(v2, v1, color);
+    pub fn set_full_edge_color(&mut self, edge: EdgeId, color: ColorIdx) {
+        self.set_half_edge_color(edge.v1(), edge.v2(), color);
+        self.set_half_edge_color(edge.v2(), edge.v1(), color);
     }
 
     pub fn set_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
@@ -1110,10 +1110,10 @@ impl Polyhedron {
     }
 
     pub fn edges(&self) -> Vec<Edge> {
-        let mut edges = HashMap::<(VertIdx, VertIdx), Edge>::new();
+        let mut edges = HashMap::<EdgeId, Edge>::new();
         for (face_idx, face) in self.faces_enumerated() {
             for (&v1, &v2) in face.verts.iter().circular_tuple_windows() {
-                let key = (v1.min(v2), v1.max(v2));
+                let key = EdgeId::new(v1, v2);
                 if let Some(edge) = edges.get_mut(&key) {
                     edge.add_left_face(v1, v2, face_idx, self);
                 } else {
@@ -1313,6 +1313,10 @@ impl Edge {
             || (self.top_vert == v2 && self.bottom_vert == v1)
     }
 
+    pub fn id(&self) -> EdgeId {
+        EdgeId::new(self.bottom_vert, self.top_vert)
+    }
+
     fn add_left_face(
         &mut self,
         v1: VertIdx,
@@ -1369,6 +1373,34 @@ fn transform_point(v: Vec3, matrix: Mat4) -> Vec3 {
     let v4 = v.extend(1.0);
     let trans_v4 = matrix * v4;
     trans_v4.truncate()
+}
+
+/// A pair of vertices which make up an edge, guaranteeing that `v1 < v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EdgeId {
+    v1: VertIdx,
+    v2: VertIdx,
+}
+
+impl EdgeId {
+    pub fn new(v1: VertIdx, v2: VertIdx) -> Self {
+        Self {
+            v1: VertIdx::min(v1, v2),
+            v2: VertIdx::max(v1, v2),
+        }
+    }
+
+    pub fn v1(self) -> VertIdx {
+        self.v1
+    }
+
+    pub fn v2(self) -> VertIdx {
+        self.v2
+    }
+
+    pub fn verts(self) -> (VertIdx, VertIdx) {
+        (self.v1, self.v2)
+    }
 }
 
 index_vec::define_index_type! { pub struct VertIdx = usize; }

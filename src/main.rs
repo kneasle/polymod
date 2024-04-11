@@ -1,8 +1,11 @@
-use std::collections::BTreeMap;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashSet},
+};
 
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use polyhedron::{EdgeAngleType, FaceIdx, Polyhedron, VertIdx};
+use polyhedron::{EdgeAngleType, EdgeId, FaceIdx, Polyhedron, VertIdx};
 use three_d::{egui::RichText, *};
 use utils::OrderedRgba;
 
@@ -64,6 +67,7 @@ fn main() {
         // Render GUI
         let mut left_panel_width = 0.0;
         let mut right_panel_width = 0.0;
+        let mut edges_to_highlight = HashSet::new();
         let mut redraw = gui.update(
             &mut frame_input.events,
             frame_input.accumulated_time,
@@ -127,7 +131,7 @@ fn main() {
                                 );
                                 ui.add_space(SMALL_SPACE);
                                 ui.heading("Geometry Breakdown");
-                                model_geom_gui(
+                                edges_to_highlight = model_geom_gui(
                                     current_model.polyhedron(),
                                     &mut show_external_angles,
                                     ui,
@@ -154,7 +158,7 @@ fn main() {
         if redraw {
             let screen = frame_input.screen();
             screen.clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0));
-            view.render(current_model!(), &screen);
+            view.render(current_model!(), &edges_to_highlight, &screen);
             screen.write(|| gui.render());
         }
 
@@ -221,8 +225,11 @@ fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
     ui.label(text);
 }
 
-// TODO: Make this a method
-fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut egui::Ui) {
+fn model_geom_gui(
+    poly: &Polyhedron,
+    show_external_angles: &mut bool,
+    ui: &mut egui::Ui,
+) -> HashSet<EdgeId> {
     // Faces
     ui.strong(format!("{} faces", poly.faces().count()));
     ui.indent("faces", |ui| {
@@ -238,6 +245,8 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
         }
     });
 
+    let mut edges_to_highlight = HashSet::new();
+
     // Edges
     ui.add_space(SMALL_SPACE);
     let edges = poly.edges();
@@ -252,9 +261,8 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
                 let col_left = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
                 let col_right = poly.edge_side_color(edge.top_vert, edge.bottom_vert);
                 // Categorise this new edge
-                let face_type = EdgeFaceType::new(left_n, right_n, col_left, col_right);
-                let are_faces_same = (left_n, col_left) == (right_n, col_right);
-                let sub_type = EdgeSubType::new(edge, are_faces_same, poly, &edges);
+                let (face_type, face_cmp) = EdgeFaceType::new(left_n, right_n, col_left, col_right);
+                let sub_type = EdgeSubType::new(edge, face_cmp, poly, &edges);
                 // Add this new edge to its corresponding category
                 let edge_list: &mut Vec<&Edge> = edge_types
                     .entry(face_type)
@@ -275,7 +283,7 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
             assert!(!angle_breakdown.is_empty());
             let num_edges = angle_breakdown.values().map(Vec::len).sum::<usize>();
             // Display overall group (e.g. "60 triangle-pentagon (152.0°)")
-            ui.horizontal_wrapped(|ui| {
+            let response = ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 // Count
                 ui.label(format!("{}x ", num_edges));
@@ -289,15 +297,23 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
                     ui.label(format!(" (all {})", sub_type.show(*show_external_angles)));
                 }
             });
+            if response.response.hovered() {
+                // Highlight these edges if hovered
+                edges_to_highlight = angle_breakdown.values().flatten().map(|e| e.id()).collect();
+            }
             // Add a angle breakdown if needed
             if angle_breakdown.len() > 1 {
                 ui.indent("", |ui| {
                     for (sub_type, edges) in angle_breakdown {
-                        ui.label(format!(
+                        let response = ui.label(format!(
                             "{}x {}",
                             edges.len(),
                             sub_type.show(*show_external_angles),
                         ));
+                        if response.hovered() {
+                            // Highlight these edges if hovered
+                            edges_to_highlight = edges.iter().map(|e| e.id()).collect();
+                        }
                     }
                 });
             }
@@ -308,6 +324,9 @@ fn model_geom_gui(poly: &Polyhedron, show_external_angles: &mut bool, ui: &mut e
     // Vertices
     ui.add_space(SMALL_SPACE);
     ui.strong(format!("{} vertices", poly.vert_positions().len()));
+
+    // Return which edges to highlight
+    edges_to_highlight
 }
 
 /// Top-level edge classification
@@ -326,18 +345,22 @@ impl EdgeFaceType {
         right_order: usize,
         left_color: egui::Rgba,
         right_color: egui::Rgba,
-    ) -> Self {
+    ) -> (Self, Ordering) {
+        // Normalize faces so that left < right
         let mut left = (left_order, OrderedRgba(left_color));
         let mut right = (right_order, OrderedRgba(right_color));
-        if left > right {
+        let ordering = left.cmp(&right);
+        if ordering.is_gt() {
             std::mem::swap(&mut left, &mut right);
         }
-        Self {
+
+        let ty = Self {
             left_order: left.0,
             right_order: right.0,
             left_color: left.1,
             right_color: right.1,
-        }
+        };
+        (ty, ordering)
     }
 }
 
@@ -351,7 +374,7 @@ struct EdgeSubType {
 }
 
 impl EdgeSubType {
-    fn new(edge: &Edge, are_faces_identical: bool, poly: &Polyhedron, edges: &[Edge]) -> Self {
+    fn new(edge: &Edge, face_cmp: Ordering, poly: &Polyhedron, edges: &[Edge]) -> Self {
         // Round dihedral angle
         let mut dihedral = Degrees::from(edge.dihedral_angle().unwrap()).0;
         dihedral = (dihedral * 128.0).round() / 128.0;
@@ -378,7 +401,7 @@ impl EdgeSubType {
         let mut left_vert = edge.bottom_vert;
         let mut right_vert = edge.top_vert;
         // Normalize face display order, so that the smaller face is always on the left
-        if poly.face_order(left_face) > poly.face_order(right_face) {
+        if face_cmp.is_lt() {
             std::mem::swap(&mut left_face, &mut right_face);
             std::mem::swap(&mut left_vert, &mut right_vert);
         }
@@ -387,7 +410,7 @@ impl EdgeSubType {
         let mut left_type = edge_angle_type(left_face, left_vert);
         let mut right_type = edge_angle_type(right_face, right_vert);
         // If both faces have the same order, then normalize the angle types
-        if are_faces_identical && left_type > right_type {
+        if face_cmp.is_eq() && left_type > right_type {
             std::mem::swap(&mut left_type, &mut right_type);
         }
 
