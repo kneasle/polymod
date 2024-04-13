@@ -367,12 +367,51 @@ impl ModelTree {
                 poly
             }),
             Model::new("Inset Truncated Dodecahedron", {
+                // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
+                // Excavate using cupolae and antiprisms to form the tunnels
                 let mut inner_face = FaceIdx::new(0);
                 for decagon in poly.ngons(10).collect_vec() {
                     let next = poly.excavate_cupola(decagon, false);
                     inner_face = poly.excavate_antiprism(next);
                 }
+                // Excavate the central cavity, and color these edges
+                let inner = Polyhedron::dodecahedron();
+                poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+                poly
+            }),
+            Model::new("Inset Truncated Dodecahedron (Colouring A)", {
+                // Start with a coloured truncated dodecahedron
+                let mut poly = Polyhedron::truncated_dodecahedron();
+                let outer_col = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
+                poly.colour_all_edges(outer_col);
+                // Excavate using cupolae and antiprisms to form the tunnels
+                let mut inner_face = FaceIdx::new(0);
+                for decagon in poly.ngons(10).collect_vec() {
+                    let next = poly.excavate_cupola(decagon, false);
+                    inner_face = poly.excavate_antiprism(next);
+                }
+                // Excavate the central cavity, and color these edges
+                let mut inner = Polyhedron::dodecahedron();
+                let inner_col = inner.add_color(egui::Rgba::from_rgb(1.0, 0.2, 0.35));
+                inner.colour_all_edges(inner_col);
+                poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+                poly
+            }),
+            Model::new("Inset Truncated Dodecahedron (Colouring B)", {
+                // Start with a coloured truncated dodecahedron
+                let mut poly = Polyhedron::truncated_dodecahedron();
+                let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
+                for tri in poly.ngons(3).collect_vec() {
+                    poly.color_face(tri, blue);
+                }
+                // Excavate using cupolae and antiprisms to form the tunnels
+                let mut inner_face = FaceIdx::new(0);
+                for decagon in poly.ngons(10).collect_vec() {
+                    let next = poly.excavate_cupola(decagon, false);
+                    inner_face = poly.excavate_antiprism(next);
+                }
+                // Excavate the central cavity, and color these edges
                 let inner = Polyhedron::dodecahedron();
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly

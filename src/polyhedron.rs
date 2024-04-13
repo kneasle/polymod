@@ -1024,6 +1024,13 @@ impl Polyhedron {
         }
     }
 
+    /// Give both sides of every edge of this model the given `color`
+    pub fn colour_all_edges(&mut self, color: ColorIdx) {
+        for edge in self.edges() {
+            self.set_full_edge_color(edge.id(), color);
+        }
+    }
+
     pub fn set_full_edge_color(&mut self, edge: EdgeId, color: ColorIdx) {
         self.set_half_edge_color(edge.v1(), edge.v2(), color);
         self.set_half_edge_color(edge.v2(), edge.v1(), color);
