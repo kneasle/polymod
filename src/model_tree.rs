@@ -366,7 +366,7 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
-            Model::new("Inset Truncated Dodecahedron", {
+            Model::new("Stephanie", {
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
                 // Excavate using cupolae and antiprisms to form the tunnels
@@ -380,7 +380,7 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
-            Model::new("Inset Truncated Dodecahedron (Colouring A)", {
+            Model::new("Stephanie (Colouring A)", {
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
                 let outer_col = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
@@ -398,7 +398,7 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
-            Model::new("Inset Truncated Dodecahedron (Colouring B)", {
+            Model::new("Stephanie (Colouring B)", {
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
                 let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
