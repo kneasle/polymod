@@ -1142,16 +1142,17 @@ impl Polyhedron {
 
     /// Gets an [`Iterator`] over the [indices](FaceIdx) of every face in `self` which has `n`
     /// sides
-    pub fn ngons(&self, n: usize) -> impl DoubleEndedIterator<Item = FaceIdx> + '_ {
+    pub fn ngons(&self, n: usize) -> Vec<FaceIdx> {
         self.faces
             .iter()
             .positions(move |f| f.as_ref().map(|face| face.verts.len()) == Some(n))
             .map(FaceIdx::new)
+            .collect_vec()
     }
 
     /// Gets the lowest-indexed face in `self` which has `n` sides.
     pub fn get_ngon(&self, n: usize) -> FaceIdx {
-        self.ngons(n).next().unwrap()
+        self.ngons(n)[0]
     }
 
     pub fn is_face(&self, idx: FaceIdx) -> bool {
