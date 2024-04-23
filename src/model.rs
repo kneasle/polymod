@@ -604,13 +604,12 @@ impl Model {
     }
 
     fn vertex_instances(&self) -> Instances {
-        let verts = &self.polyhedron.vert_positions();
+        let verts = &self.polyhedron.verts();
         let color = egui_color_to_srgba(darken_color(self.default_color, WIREFRAME_TINT));
         Instances {
             transformations: verts
                 .iter()
-                .cloned()
-                .map(Mat4::from_translation)
+                .map(|v| Mat4::from_translation(v.pos()))
                 .collect_vec(),
             colors: Some(vec![color; verts.len()]),
             ..Default::default()

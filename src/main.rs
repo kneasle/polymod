@@ -331,7 +331,7 @@ fn model_geom_gui(
 
     // Vertices
     ui.add_space(SMALL_SPACE);
-    ui.strong(format!("{} vertices", poly.vert_positions().len()));
+    ui.strong(format!("{} vertices", poly.verts().len()));
 
     // Return which edges to highlight
     edges_to_highlight

@@ -16,7 +16,7 @@ use crate::utils::{lerp3, Side};
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Polyhedron {
-    verts: VertVec<Vec3>,
+    verts: VertVec<Vertex>,
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Option<Face>>,
 
@@ -29,6 +29,17 @@ pub struct Polyhedron {
     /// polyhedra, but also allows the colors themselves to be modified without mutating the
     /// underlying `Polyhedron` (which shouldn't care how it will be rendered).
     half_edge_colors: HashMap<(VertIdx, VertIdx), String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Vertex {
+    pos: Vec3,
+}
+
+impl Vertex {
+    pub fn pos(&self) -> Vec3 {
+        self.pos
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +63,7 @@ impl Face {
     pub fn centroid(&self, polyhedron: &Polyhedron) -> Vec3 {
         let mut total = Vec3::zero();
         for v in &self.verts {
-            total += polyhedron.verts[*v];
+            total += polyhedron.vert_pos(*v);
         }
         total / self.verts.len() as f32
     }
@@ -93,7 +104,7 @@ impl Face {
     pub fn vert_positions(&self, polyhedron: &Polyhedron) -> Vec<Vec3> {
         self.verts
             .iter()
-            .map(|idx| polyhedron.verts[*idx])
+            .map(|idx| polyhedron.vert_pos(*idx))
             .collect_vec()
     }
 }
@@ -245,11 +256,11 @@ impl Polyhedron {
         };
         // `new_vert_on_edge[(a, b)]` is the first vertex on the edge going from `a` to `b`
         // (therefore, `new_vert_on_edge[(a, b)]` won't be the same as `new_vert_on_edge[(b, a)]`)
-        let mut new_verts = VertVec::<Vec3>::new();
+        let mut new_verts = VertVec::<Vertex>::new();
         let mut new_vert_on_edge = HashMap::<(VertIdx, VertIdx), VertIdx>::new();
         let mut add_vert = |v1: VertIdx, v2: VertIdx| {
-            let pos = lerp3(self.verts[v1], self.verts[v2], lerp_factor);
-            let new_idx = new_verts.push(pos);
+            let pos = lerp3(self.vert_pos(v1), self.vert_pos(v2), lerp_factor);
+            let new_idx = new_verts.push(Vertex { pos });
             new_vert_on_edge.insert((v1, v2), new_idx);
         };
         for e in self.edges() {
@@ -325,7 +336,11 @@ impl Polyhedron {
         for (face_idx, face) in self.faces_enumerated() {
             // Determine where to place the new face
             let centroid = self.face_centroid(face_idx);
-            let edge_midpoint = lerp3(self.verts[face.verts[0]], self.verts[face.verts[1]], 0.5);
+            let edge_midpoint = lerp3(
+                self.vert_pos(face.verts[0]),
+                self.vert_pos(face.verts[1]),
+                0.5,
+            );
             let new_face_centroid = centroid * scaling_factor;
             let new_y_axis = (edge_midpoint - centroid).normalize();
             let new_x_axis = centroid.normalize().cross(new_y_axis);
@@ -334,7 +349,7 @@ impl Polyhedron {
             for i in 0..new_face_order {
                 let (x, y) = new_face_geometry.offset_point(i, 0.5);
                 let pos = new_face_centroid + x * new_x_axis + y * new_y_axis;
-                let new_vert_idx = new_verts.push(pos);
+                let new_vert_idx = new_verts.push(Vertex { pos });
                 face_verts.push(new_vert_idx);
                 // Record this vertex's presence on the new edges
                 let old_vert_idx = match greatness {
@@ -410,7 +425,11 @@ impl Polyhedron {
         for (face_idx, face) in self.faces_enumerated() {
             // Determine where to place the new face
             let centroid = self.face_centroid(face_idx);
-            let edge_midpoint = lerp3(self.verts[face.verts[0]], self.verts[face.verts[1]], 0.5);
+            let edge_midpoint = lerp3(
+                self.vert_pos(face.verts[0]),
+                self.vert_pos(face.verts[1]),
+                0.5,
+            );
             let new_face_centroid = centroid.normalize() * new_inradius;
             let new_y_axis = (edge_midpoint - centroid).normalize();
             let new_x_axis = centroid.normalize().cross(new_y_axis);
@@ -419,7 +438,7 @@ impl Polyhedron {
             for i in 0..face_order {
                 let (x, y) = face_geometry.offset_point(i, rotation);
                 let pos = new_face_centroid + x * new_x_axis + y * new_y_axis;
-                let new_vert_idx = new_verts.push(pos);
+                let new_vert_idx = new_verts.push(Vertex { pos });
                 face_verts.push(new_vert_idx);
                 // Record this vertex's presence on the new edges
                 #[allow(clippy::identity_op)]
@@ -643,9 +662,9 @@ impl Polyhedron {
         // Strip any vertices which are below the XZ plane (i.e. those with negative y-coordinates)
         let mut vert_map = VertVec::new(); // Maps old vert indices to new vert indices
         let mut new_verts = VertVec::new();
-        for &v in &poly.verts {
-            vert_map.push(if v.y > -0.00001 {
-                Some(new_verts.push(v))
+        for v in &poly.verts {
+            vert_map.push(if v.pos.y > -0.00001 {
+                Some(new_verts.push(v.clone()))
             } else {
                 None
             });
@@ -665,11 +684,11 @@ impl Polyhedron {
         // Create a new decagon for the base
         let mut verts_on_xz_plane = new_verts
             .iter()
-            .positions(|v| v.y.abs() < 0.000001)
+            .positions(|v| v.pos.y.abs() < 0.000001)
             .map(VertIdx::new)
             .collect_vec();
         verts_on_xz_plane.sort_by_key(|v_idx| {
-            let pos = new_verts[*v_idx];
+            let pos = new_verts[*v_idx].pos;
             OrderedFloat(-f32::atan2(pos.x, pos.z))
         });
         let bottom_face = new_faces.push(Some(Face {
@@ -851,7 +870,7 @@ impl Polyhedron {
         let new_vert_indices: VertVec<VertIdx> = other
             .verts
             .iter()
-            .map(|&v| self.add_vert(transform_point(v, transform)))
+            .map(|v| self.add_vert(transform_point(v.pos, transform)))
             .collect();
         // Add all the new faces (turning them inside out if we're excavating)
         let mut new_face_indices = FaceVec::new();
@@ -904,10 +923,11 @@ impl Polyhedron {
 
     pub fn dual(&self) -> Self {
         // Create vertices at the centroids of each of the faces
-        let mut new_verts = VertVec::new();
+        let mut new_verts = VertVec::<Vertex>::new();
         let mut vert_idx_for_current_face = HashMap::<FaceIdx, VertIdx>::new();
         for (face_idx, _face) in self.faces_enumerated() {
-            let new_vert_idx = new_verts.push(self.face_centroid(face_idx));
+            let pos = self.face_centroid(face_idx);
+            let new_vert_idx = new_verts.push(Vertex { pos });
             vert_idx_for_current_face.insert(face_idx, new_vert_idx);
         }
         // For each current vert, create a new face who's vertices correspond to current model's faces
@@ -985,7 +1005,7 @@ impl Polyhedron {
 
     pub fn transform_verts(&mut self, mut f: impl FnMut(Vec3) -> Vec3) {
         for v in &mut self.verts {
-            *v = f(*v);
+            v.pos = f(v.pos);
         }
     }
 
@@ -1011,7 +1031,7 @@ const VERTEX_MERGE_DIST_SQUARED: f32 = VERTEX_MERGE_DIST * VERTEX_MERGE_DIST;
 impl Polyhedron {
     fn new(verts: Vec<Vec3>, faces: FaceVec<Vec<usize>>) -> Self {
         let mut m = Self {
-            verts: index_vec::IndexVec::from_vec(verts),
+            verts: verts.into_iter().map(|pos| Vertex { pos }).collect(),
             faces: faces
                 .into_iter()
                 .map(|verts| Face {
@@ -1058,22 +1078,22 @@ impl Polyhedron {
 
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
     /// at `p`, then its index is returned.
-    pub fn add_vert(&mut self, p: Vec3) -> VertIdx {
+    pub fn add_vert(&mut self, pos: Vec3) -> VertIdx {
         // Look for existing vertices to dedup with
         for (idx, v) in self.verts.iter_enumerated() {
-            if (p - *v).magnitude2() < VERTEX_MERGE_DIST_SQUARED {
+            if (pos - v.pos).magnitude2() < VERTEX_MERGE_DIST_SQUARED {
                 return idx;
             }
         }
         // If vertex isn't already present, add a new one
-        self.verts.push(p)
+        self.verts.push(Vertex { pos })
     }
 
     pub fn vert_pos(&self, idx: VertIdx) -> Vec3 {
-        self.verts[idx]
+        self.verts[idx].pos
     }
 
-    pub fn vert_positions(&self) -> &[Vec3] {
+    pub fn verts(&self) -> &[Vertex] {
         self.verts.as_raw_slice()
     }
 
@@ -1127,7 +1147,7 @@ impl Polyhedron {
                 if let Some(edge) = edges.get_mut(&key) {
                     edge.add_left_face(v1, v2, face_idx, self);
                 } else {
-                    let direction = self.verts[v2] - self.verts[v1];
+                    let direction = self.vert_pos(v2) - self.vert_pos(v1);
                     let edge = Edge {
                         bottom_vert: v1,
                         top_vert: v2,
@@ -1200,7 +1220,7 @@ impl Polyhedron {
     /// - The x-axis now points towards the centre of the face, perpendicular to the y-axis.
     pub fn face_transform(&self, face: FaceIdx, rotation: usize, side: Side) -> Mat4 {
         let verts = &self.get_face(face).verts;
-        let translation = Mat4::from_translation(self.get_vert_pos(verts, rotation));
+        let translation = Mat4::from_translation(self.vert_pos_on_face(verts, rotation));
         let rotation = self.face_rotation(verts, rotation, side);
         translation * rotation
     }
@@ -1217,8 +1237,8 @@ impl Polyhedron {
             Side::In => verts.len() - 1,
             Side::Out => 1,
         };
-        let v0 = self.get_vert_pos(verts, rotation);
-        let v1 = self.get_vert_pos(verts, rotation + vert_offset);
+        let v0 = self.vert_pos_on_face(verts, rotation);
+        let v1 = self.vert_pos_on_face(verts, rotation + vert_offset);
         let new_y = (v1 - v0).normalize();
         let mut new_z = self.normal_from_verts(verts);
         if side == Side::In {
@@ -1240,23 +1260,23 @@ impl Polyhedron {
 
     fn normal_from_verts(&self, verts: &[VertIdx]) -> Vec3 {
         assert!(verts.len() >= 3);
-        let v0 = self.get_vert_pos(verts, 0);
-        let v1 = self.get_vert_pos(verts, 1);
-        let v2 = self.get_vert_pos(verts, 2);
+        let v0 = self.vert_pos_on_face(verts, 0);
+        let v1 = self.vert_pos_on_face(verts, 1);
+        let v2 = self.vert_pos_on_face(verts, 2);
         let d1 = v1 - v0;
         let d2 = v2 - v0;
         d1.cross(d2).normalize()
     }
 
-    fn get_vert_pos(&self, face: &[VertIdx], vert: usize) -> Vec3 {
+    fn vert_pos_on_face(&self, face: &[VertIdx], vert: usize) -> Vec3 {
         let vert_idx = face[vert % face.len()];
-        self.verts[vert_idx]
+        self.vert_pos(vert_idx)
     }
 
     pub fn centroid(&self) -> Vec3 {
         let mut total = Vec3::zero();
         for v in &self.verts {
-            total += *v;
+            total += v.pos;
         }
         total / self.verts.len() as f32
     }
@@ -1269,7 +1289,7 @@ impl Polyhedron {
         let centroid = self.centroid();
         self.verts
             .iter()
-            .map(|v| v.distance(centroid))
+            .map(|v| v.pos.distance(centroid))
             .reduce(f32::max)
             .unwrap_or(0.0)
     }
@@ -1298,8 +1318,8 @@ pub struct ClosedEdgeData {
 
 impl Edge {
     pub fn length(&self, polyhedron: &Polyhedron) -> f32 {
-        let v1 = polyhedron.verts[self.bottom_vert];
-        let v2 = polyhedron.verts[self.top_vert];
+        let v1 = polyhedron.vert_pos(self.bottom_vert);
+        let v2 = polyhedron.vert_pos(self.top_vert);
         v1.distance(v2)
     }
 
@@ -1343,8 +1363,9 @@ impl Edge {
     }
 
     fn get_dihedral_angle(&self, left_face: FaceIdx, polyhedron: &Polyhedron) -> Radians {
-        let direction =
-            (polyhedron.verts[self.top_vert] - polyhedron.verts[self.bottom_vert]).normalize();
+        let direction = (polyhedron.vert_pos(self.top_vert)
+            - polyhedron.vert_pos(self.bottom_vert))
+        .normalize();
         // Get face normals
         let left_normal = polyhedron.face_normal(left_face);
         let right_normal = polyhedron.face_normal(self.right_face);
