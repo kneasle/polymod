@@ -7,8 +7,7 @@ use std::{
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use three_d::{
-    vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4,
-    Zero,
+    vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Vec3, Vec4, Zero,
 };
 
 use crate::utils::{lerp3, Side};
@@ -107,11 +106,6 @@ impl Face {
             .map(|idx| polyhedron.vert_pos(*idx))
             .collect_vec()
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct EdgeData {
-    color: Option<Srgba>,
 }
 
 ////////////
