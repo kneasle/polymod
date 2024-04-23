@@ -1,5 +1,8 @@
 use itertools::Itertools;
-use three_d::egui::{self, Rgba};
+use three_d::{
+    egui::{self, Rgba},
+    Vec3,
+};
 
 use crate::{
     model::{Model, ModelId},
@@ -276,7 +279,7 @@ impl ModelTree {
             }),
             Model::new("Bob", {
                 let mut poly = Polyhedron::truncated_cube();
-                let face = poly.ngons(8)[2];
+                let face = poly.get_face_with_normal(Vec3::unit_x());
                 let next = poly.excavate_cupola(face, true);
                 let next = poly.excavate_prism(next);
                 poly.excavate_cupola(next, false);
@@ -284,10 +287,23 @@ impl ModelTree {
             }),
             Model::new("Gyrated Bob", {
                 let mut poly = Polyhedron::truncated_cube();
-                let face = poly.ngons(8)[2];
+                let face = poly.get_face_with_normal(Vec3::unit_x());
                 let next = poly.excavate_cupola(face, false);
                 let next = poly.excavate_prism(next);
                 poly.excavate_cupola(next, false);
+                poly
+            }),
+            Model::new("Dumbell", {
+                let mut poly = Polyhedron::truncated_cube();
+                // Extend +x and -x faces with cupolae
+                let face = poly.get_face_with_normal(Vec3::unit_x());
+                let back_face = poly.get_face_with_normal(-Vec3::unit_x());
+                poly.extend_cupola(back_face, true);
+                let next = poly.extend_cupola(face, true);
+                // Tunnel with B_4 (P_4) B_4
+                let next = poly.excavate_cuboctahedron(next);
+                let next = poly.excavate_prism(next);
+                poly.excavate_cuboctahedron(next);
                 poly
             }),
             Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
@@ -299,8 +315,7 @@ impl ModelTree {
                     top_face,
                 } = Polyhedron::cupola(4);
                 poly.extend_cupola(bottom_face, true);
-                let tunnel = Polyhedron::cuboctahedron();
-                poly.excavate(top_face, &tunnel, tunnel.get_ngon(4), 0);
+                poly.excavate_cuboctahedron(top_face);
                 poly
             }),
             Model::new("K_3 / 3Q_3 (S_3)", {

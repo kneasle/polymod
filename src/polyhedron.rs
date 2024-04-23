@@ -625,6 +625,15 @@ impl Polyhedron {
         }
     }
 
+    pub fn cuboctahedron_prismlike() -> PrismLike {
+        let poly = Self::cuboctahedron();
+        PrismLike {
+            bottom_face: poly.get_face_with_normal(-Vec3::unit_y()),
+            top_face: poly.get_face_with_normal(Vec3::unit_y()),
+            poly,
+        }
+    }
+
     pub fn rotunda() -> PrismLike {
         let poly = Self::icosidodecahedron();
         // Strip any vertices which are below the XZ plane (i.e. those with negative y-coordinates)
@@ -717,6 +726,7 @@ enum MergeDir {
     Excavate,
 }
 
+#[allow(dead_code)]
 impl Polyhedron {
     /// 'Extend' this polyhedron by adding a copy of `other` onto the given `face`.
     /// The `other` polyhedron is attached by `its_face`.
@@ -740,7 +750,6 @@ impl Polyhedron {
         self.merge_prismlike(face, MergeDir::Extend, 0, Self::prism)
     }
 
-    #[allow(dead_code)]
     pub fn extend_antiprism(&mut self, face: FaceIdx) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Extend, 0, Self::antiprism)
     }
@@ -749,9 +758,14 @@ impl Polyhedron {
         self.merge_prismlike(face, MergeDir::Extend, gyro as usize, Self::oriented_cupola)
     }
 
-    #[allow(dead_code)]
     pub fn extend_rotunda(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Extend, gyro as usize, |_n| Self::rotunda())
+    }
+
+    pub fn extend_cuboctahedron(&mut self, face: FaceIdx) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Extend, 0, |_n| {
+            Self::cuboctahedron_prismlike()
+        })
     }
 
     /// 'Excavate' this polyhedron by adding a copy of `other` onto the given `face`.
@@ -786,6 +800,12 @@ impl Polyhedron {
     pub fn excavate_rotunda(&mut self, face: FaceIdx, gyro: bool) -> FaceIdx {
         self.merge_prismlike(face, MergeDir::Excavate, gyro as usize, |_n| {
             Self::rotunda()
+        })
+    }
+
+    pub fn excavate_cuboctahedron(&mut self, face: FaceIdx) -> FaceIdx {
+        self.merge_prismlike(face, MergeDir::Excavate, 0, |_n| {
+            Self::cuboctahedron_prismlike()
         })
     }
 
@@ -1173,7 +1193,7 @@ impl Polyhedron {
         self.faces[face].as_ref().unwrap()
     }
 
-    fn get_face_with_normal(&self, normal: Vec3) -> FaceIdx {
+    pub fn get_face_with_normal(&self, normal: Vec3) -> FaceIdx {
         let (idx, _face) = self
             .faces_enumerated()
             .find(|(_idx, f)| f.normal(self).angle(normal) < Rad(0.01))
