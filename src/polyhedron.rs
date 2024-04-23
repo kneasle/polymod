@@ -24,9 +24,9 @@ pub struct Polyhedron {
     /// of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
     /// given the color at `color_index[idx]`.
     ///
-    /// Note that the exact colours are stored outside of the `Polyhedron` but are referred to here
-    /// by [`String`] identifiers.  This allows colours to be merged correctly while merging
-    /// polyhedra, but also allows the colours themselves to be modified without mutating the
+    /// Note that the exact colors are stored outside of the `Polyhedron` but are referred to here
+    /// by [`String`] identifiers.  This allows colors to be merged correctly while merging
+    /// polyhedra, but also allows the colors themselves to be modified without mutating the
     /// underlying `Polyhedron` (which shouldn't care how it will be rendered).
     half_edge_colors: HashMap<(VertIdx, VertIdx), String>,
 }
@@ -871,7 +871,7 @@ impl Polyhedron {
         // polyhedra)
         self.cancel_faces();
 
-        // Merge colour assignments
+        // Merge color assignments
         for ((v1, v2), col_name) in &other.half_edge_colors {
             let new_v1 = new_vert_indices[*v1];
             let new_v2 = new_vert_indices[*v2];
@@ -940,14 +940,14 @@ impl Polyhedron {
         value
     }
 
-    /// Perform a given `operation`, and set the colours of any new edges to the given `colour`
+    /// Perform a given `operation`, and set the colors of any new edges to the given `color`
     pub fn get_edges_added_by<T>(
         &mut self,
         operation: impl FnOnce(&mut Self) -> T,
     ) -> (Vec<EdgeId>, T) {
         let first_new_vert_idx = self.verts.len_idx();
         let result = operation(self);
-        // Colour any edges which contain one or more new vertex
+        // Color any edges which contain one or more new vertex
         let mut edges_added = Vec::new();
         for e in self.edges() {
             if e.top_vert >= first_new_vert_idx || e.bottom_vert >= first_new_vert_idx {
@@ -1036,7 +1036,7 @@ impl Polyhedron {
     }
 
     /// Give both sides of every edge of this model the given `color`
-    pub fn colour_all_edges(&mut self, color_name: &str) {
+    pub fn color_all_edges(&mut self, color_name: &str) {
         for edge in self.edges() {
             self.set_full_edge_color(edge.id(), color_name);
         }

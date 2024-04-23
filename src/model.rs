@@ -91,7 +91,7 @@ impl Model {
             })
         };
 
-        // Draw all colours, including the default one
+        // Draw all colors, including the default one
         draw_color(&mut self.default_color, "(Default)");
         for (name, color) in &mut self.colors {
             draw_color(color, name);
@@ -518,7 +518,7 @@ impl Model {
             // face gets flat shading
             let first_vert_idx = verts.len() as u32;
             verts.extend_from_slice(&face_verts);
-            // Add colours for this face's vertices
+            // Add colors for this face's vertices
             colors.extend(std::iter::repeat(color).take(face_verts.len()));
             // Add the vert indices for this face
             for i in 2..face_verts.len() as u32 {

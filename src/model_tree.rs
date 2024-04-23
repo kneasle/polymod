@@ -385,7 +385,7 @@ impl ModelTree {
                 poly
             }),
             Model::new("Stephanie", {
-                // Start with a coloured truncated dodecahedron
+                // Start with a colored truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
                 // Excavate using cupolae and antiprisms to form the tunnels
                 let mut inner_face = FaceIdx::new(0);
@@ -405,9 +405,9 @@ impl ModelTree {
                 color_map.insert(OUTER_COL.to_owned(), BLUE);
                 color_map.insert(INNER_COL.to_owned(), RED);
 
-                // Start with a coloured truncated dodecahedron
+                // Start with a colored truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
-                poly.colour_all_edges(OUTER_COL);
+                poly.color_all_edges(OUTER_COL);
                 // Excavate using cupolae and antiprisms to form the tunnels
                 let mut inner_face = FaceIdx::new(0);
                 for decagon in poly.ngons(10) {
@@ -416,17 +416,17 @@ impl ModelTree {
                 }
                 // Excavate the central cavity, and color these edges
                 let mut inner = Polyhedron::dodecahedron();
-                inner.colour_all_edges(INNER_COL);
+                inner.color_all_edges(INNER_COL);
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
 
-                Model::with_colors("Stephanie (Colouring A)", poly, color_map)
+                Model::with_colors("Stephanie (Coloring A)", poly, color_map)
             },
             {
                 const OUTER_COL: &str = "Outer";
                 let mut color_map = ColorMap::new();
                 color_map.insert(OUTER_COL.to_owned(), BLUE);
 
-                // Start with a coloured truncated dodecahedron
+                // Start with a colored truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
                 for tri in poly.ngons(3) {
                     poly.color_face(tri, OUTER_COL);
@@ -441,7 +441,7 @@ impl ModelTree {
                 let inner = Polyhedron::dodecahedron();
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
 
-                Model::with_colors("Stephanie (Colouring B)", poly, color_map)
+                Model::with_colors("Stephanie (Coloring B)", poly, color_map)
             },
             {
                 const PENTAGONS: &str = "Outer";
@@ -471,7 +471,7 @@ impl ModelTree {
                     .faces_enumerated()
                     .map(|(idx, _face)| idx)
                     .collect_vec();
-                // Dig tunnel, and colour it blue
+                // Dig tunnel, and color it blue
                 poly.color_edges_added_by(
                     |poly| {
                         poly.excavate_antiprism(bottom_face);
@@ -510,7 +510,7 @@ fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedr
             mut poly,
             base_face,
         } = Polyhedron::pyramid(n);
-        // Colour the base face
+        // Color the base face
         let verts = &poly.get_face(base_face).verts().to_vec();
         for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
             poly.set_half_edge_color(v2, v1, color_name);
