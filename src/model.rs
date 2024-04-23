@@ -9,7 +9,7 @@ use three_d::{
 };
 
 use crate::{
-    polyhedron::{EdgeId, VertIdx},
+    polyhedron::{EdgeId, FaceIdx, PrismLike, Pyramid, VertIdx},
     utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba, lerp_color},
 };
 use crate::{
@@ -33,13 +33,13 @@ pub struct Model {
 pub type ColorMap = IndexMap<String, Color32>;
 
 impl Model {
-    pub fn new(name: &str, poly: Polyhedron) -> Self {
-        Self::with_colors(name, poly, ColorMap::new())
+    pub fn new(full_name: String, poly: Polyhedron) -> Self {
+        Self::with_colors(full_name, poly, ColorMap::new())
     }
 
-    pub fn with_colors(name: &str, poly: Polyhedron, colors: ColorMap) -> Self {
+    pub fn with_colors(full_name: String, poly: Polyhedron, colors: ColorMap) -> Self {
         Self {
-            full_name: name.to_owned(),
+            full_name,
             polyhedron: poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
@@ -647,4 +647,464 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
             None,
         ))
         * Mat4::from_nonuniform_scale((p1 - p2).magnitude(), 1.0, 1.0)
+}
+
+/////////////////////
+// BUILT-IN MODELS //
+/////////////////////
+
+pub fn builtin_models() -> Vec<Model> {
+    let platonic = [
+        ("Tetrahedron", Polyhedron::tetrahedron()),
+        ("Cube", Polyhedron::cube()),
+        ("Octahedron", Polyhedron::octahedron()),
+        ("Dodecahedron", Polyhedron::dodecahedron()),
+        ("Icosahedron", Polyhedron::icosahedron()),
+    ];
+    let archimedean_tetra = [("Truncated Tetrahedron", Polyhedron::truncated_tetrahedron())];
+    let archimedean_octa = [
+        ("Truncated Cube", Polyhedron::truncated_cube()),
+        ("Truncated Octahedron", Polyhedron::truncated_octahedron()),
+        ("Cuboctahedron", Polyhedron::cuboctahedron()),
+        ("Snub Cube", Polyhedron::snub_cube()),
+        ("Rhombicuboctahedron", Polyhedron::rhombicuboctahedron()),
+        (
+            "Great Rhombicuboctahedron",
+            Polyhedron::great_rhombicuboctahedron(),
+        ),
+    ];
+    let archimedean_dodeca = [
+        (
+            "Truncated Dodecahedron",
+            Polyhedron::truncated_dodecahedron(),
+        ),
+        ("Truncated Icosahedron", Polyhedron::truncated_icosahedron()),
+        ("Icosidodecahedron", Polyhedron::icosidodecahedron()),
+        ("Snub Dodecahedron", Polyhedron::snub_dodecahedron()),
+        (
+            "Rhombicosidodecahedron",
+            Polyhedron::rhombicosidodecahedron(),
+        ),
+        (
+            "Great Rhombicosidodecahedron",
+            Polyhedron::great_rhombicosidodecahedron(),
+        ),
+    ];
+
+    let pyramidlikes = [
+        ("3-Pyramid = Tetrahedron", Polyhedron::pyramid(3).poly),
+        ("4-Pyramid", Polyhedron::pyramid(4).poly),
+        ("5-Pyramid", Polyhedron::pyramid(5).poly),
+        ("3-Cupola", Polyhedron::cupola(3).poly),
+        ("4-Cupola", Polyhedron::cupola(4).poly),
+        ("5-Cupola", Polyhedron::cupola(5).poly),
+        ("Rotunda", Polyhedron::rotunda().poly),
+    ];
+    let prismlikes = [
+        ("3-Prism", Polyhedron::prism(3).poly),
+        ("4-Prism = Cube", Polyhedron::prism(4).poly),
+        ("5-Prism", Polyhedron::prism(5).poly),
+        ("6-Prism", Polyhedron::prism(6).poly),
+        ("7-Prism", Polyhedron::prism(7).poly),
+        ("8-Prism", Polyhedron::prism(8).poly),
+        ("3-Antiprism = Octahedron", Polyhedron::antiprism(3).poly),
+        ("4-Antiprism", Polyhedron::antiprism(4).poly),
+        ("5-Antiprism", Polyhedron::antiprism(5).poly),
+        ("6-Antiprism", Polyhedron::antiprism(6).poly),
+        ("7-Antiprism", Polyhedron::antiprism(7).poly),
+        ("8-Antiprism", Polyhedron::antiprism(8).poly),
+    ];
+
+    let groups = [
+        (r"Platonic", platonic.to_vec()),
+        (r"Archimedean", archimedean_tetra.to_vec()),
+        (r"Archimedean\Octahedral", archimedean_octa.to_vec()),
+        (r"Archimedean\Dodecahedral", archimedean_dodeca.to_vec()),
+        (r"Pyramids and Cupolae", pyramidlikes.to_vec()),
+        (r"Prisms and Antiprisms", prismlikes.to_vec()),
+    ];
+
+    let mut all_models = Vec::new();
+    for (group_name, models) in groups {
+        for (model_name, poly) in models {
+            all_models.push(Model::new(full_builtin_name(group_name, model_name), poly));
+        }
+    }
+    for mut model in toroids() {
+        model.full_name = full_builtin_name("Toroids", &model.full_name);
+        all_models.push(model);
+    }
+    all_models
+}
+
+fn toroids() -> Vec<Model> {
+    const BLUE: Color32 = Color32::from_rgb(51, 90, 255);
+    const RED: Color32 = Color32::from_rgb(255, 51, 90);
+
+    let qpq_slash_p = |gyro: bool| -> Polyhedron {
+        let PrismLike {
+            mut poly,
+            bottom_face,
+            top_face,
+        } = Polyhedron::prism(6);
+        let face_to_excavate = poly.get_ngon(4);
+        poly.extend_cupola(bottom_face, false);
+        poly.extend_cupola(top_face, gyro);
+        let tunnel = Polyhedron::prism(6).poly;
+        poly.excavate(face_to_excavate, &tunnel, tunnel.get_ngon(4), 1);
+        poly
+    };
+
+    let toroids = [
+        Model::new("Flying saucer".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face,
+            } = Polyhedron::cupola(5);
+            poly.extend_cupola(bottom_face, true);
+            poly.transform_verts(|mut v| {
+                v.y = f32::round(v.y * 2.0) / 2.0;
+                v
+            });
+            poly.excavate_prism(top_face);
+            poly
+        }),
+        Model::new("Cake pan".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face: _,
+            } = Polyhedron::cupola(3);
+            let next = poly.extend_prism(bottom_face);
+            let next = poly.excavate_cupola(next, true);
+            poly.excavate_prism(next);
+            poly
+        }),
+        Model::new("Cakier pan".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face: _,
+            } = Polyhedron::cupola(4);
+            let next = poly.extend_prism(bottom_face);
+            let next = poly.excavate_cupola(next, true);
+            poly.excavate_prism(next);
+            poly
+        }),
+        Model::new("Cakiest pan".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face: _,
+            } = Polyhedron::cupola(5);
+            let next = poly.extend_prism(bottom_face);
+            let next = poly.excavate_cupola(next, true);
+            poly.excavate_prism(next);
+            poly
+        }),
+        Model::new("Torturous Tunnel".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face,
+            } = Polyhedron::cupola(3);
+            let bottom_face = poly.extend_cupola(bottom_face, true);
+            poly.excavate_antiprism(bottom_face);
+            poly.excavate_antiprism(top_face);
+            poly
+        }),
+        Model::new("Oriental Hat".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face: _,
+            } = Polyhedron::rotunda();
+            let bottom_face = poly.excavate_cupola(bottom_face, false);
+            poly.excavate_antiprism(bottom_face);
+            poly
+        }),
+        Model::new("Bob".to_owned(), {
+            let mut poly = Polyhedron::truncated_cube();
+            let face = poly.get_face_with_normal(Vec3::unit_x());
+            let next = poly.excavate_cupola(face, true);
+            let next = poly.excavate_prism(next);
+            poly.excavate_cupola(next, false);
+            poly
+        }),
+        Model::new("Gyrated Bob".to_owned(), {
+            let mut poly = Polyhedron::truncated_cube();
+            let face = poly.get_face_with_normal(Vec3::unit_x());
+            let next = poly.excavate_cupola(face, false);
+            let next = poly.excavate_prism(next);
+            poly.excavate_cupola(next, false);
+            poly
+        }),
+        Model::new("Dumbell".to_owned(), {
+            let mut poly = Polyhedron::truncated_cube();
+            // Extend +x and -x faces with cupolae
+            let face = poly.get_face_with_normal(Vec3::unit_x());
+            let back_face = poly.get_face_with_normal(-Vec3::unit_x());
+            poly.extend_cupola(back_face, true);
+            let next = poly.extend_cupola(face, true);
+            // Tunnel with B_4 (P_4) B_4
+            let next = poly.excavate_cuboctahedron(next);
+            let next = poly.excavate_prism(next);
+            poly.excavate_cuboctahedron(next);
+            poly
+        }),
+        Model::new("Q_3 P_6 Q_3 / P_6".to_owned(), qpq_slash_p(false)),
+        Model::new("Q_3 P_6 gQ_3 / P_6".to_owned(), qpq_slash_p(true)),
+        Model::new("Q_4^2 / B_4".to_owned(), {
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face,
+            } = Polyhedron::cupola(4);
+            poly.extend_cupola(bottom_face, true);
+            poly.excavate_cuboctahedron(top_face);
+            poly
+        }),
+        Model::new("K_3 / 3Q_3 (S_3)".to_owned(), {
+            let mut poly = Polyhedron::truncated_octahedron();
+            // Excavate cupolas (TODO: Do this by symmetry)
+            let mut inner_face = FaceIdx::new(0);
+            for face_idx in [0, 2, 4, 6] {
+                inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
+            }
+            // Excavate central octahedron
+            poly.excavate_antiprism(inner_face);
+            poly
+        }),
+        Model::new("K_4 (tunnel octagons)".to_owned(), {
+            let mut poly = Polyhedron::great_rhombicuboctahedron();
+            let mut inner_face = FaceIdx::new(0);
+            for octagon in poly.ngons(8) {
+                inner_face = poly.excavate_cupola(octagon, false);
+            }
+            let inner = Polyhedron::rhombicuboctahedron();
+            poly.excavate(inner_face, &inner, inner.get_ngon(4), 0);
+            poly
+        }),
+        Model::new("K_4 (tunnel hexagons)".to_owned(), {
+            let mut poly = Polyhedron::great_rhombicuboctahedron();
+            let mut inner_face = FaceIdx::new(0);
+            for hexagon in poly.ngons(6) {
+                inner_face = poly.excavate_cupola(hexagon, true);
+            }
+            let inner = Polyhedron::rhombicuboctahedron();
+            poly.excavate(inner_face, &inner, inner.get_ngon(3), 0);
+            poly
+        }),
+        Model::new("K_4 (tunnel cubes)".to_owned(), {
+            let mut poly = Polyhedron::great_rhombicuboctahedron();
+            let mut inner_face = FaceIdx::new(0);
+            for square in poly.ngons(4) {
+                inner_face = poly.excavate_prism(square);
+            }
+            let inner = Polyhedron::rhombicuboctahedron();
+            let face = *inner.ngons(4).last().unwrap();
+            poly.excavate(inner_face, &inner, face, 0);
+            poly
+        }),
+        Model::new("K_5 (cupola/antiprism)".to_owned(), {
+            let mut poly = Polyhedron::great_rhombicosidodecahedron();
+            let mut inner_face = FaceIdx::new(0);
+            for decagon in poly.ngons(10) {
+                let next = poly.excavate_cupola(decagon, true);
+                inner_face = poly.excavate_antiprism(next);
+            }
+            let inner = Polyhedron::rhombicosidodecahedron();
+            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+            poly
+        }),
+        Model::new("K_5 (rotunda)".to_owned(), {
+            let mut poly = Polyhedron::great_rhombicosidodecahedron();
+            let mut inner_face = FaceIdx::new(0);
+            for decagon in poly.ngons(10) {
+                inner_face = poly.excavate_rotunda(decagon, true);
+            }
+            let inner = Polyhedron::rhombicosidodecahedron();
+            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+            poly
+        }),
+        Model::new("Stephanie".to_owned(), {
+            // Start with a colored truncated dodecahedron
+            let mut poly = Polyhedron::truncated_dodecahedron();
+            // Excavate using cupolae and antiprisms to form the tunnels
+            let mut inner_face = FaceIdx::new(0);
+            for decagon in poly.ngons(10) {
+                let next = poly.excavate_cupola(decagon, false);
+                inner_face = poly.excavate_antiprism(next);
+            }
+            // Excavate the central cavity, and color these edges
+            let inner = Polyhedron::dodecahedron();
+            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+            poly
+        }),
+        {
+            const OUTER_COL: &str = "Outer";
+            const INNER_COL: &str = "Inner";
+            let mut color_map = ColorMap::new();
+            color_map.insert(OUTER_COL.to_owned(), BLUE);
+            color_map.insert(INNER_COL.to_owned(), RED);
+
+            // Start with a colored truncated dodecahedron
+            let mut poly = Polyhedron::truncated_dodecahedron();
+            poly.color_all_edges(OUTER_COL);
+            // Excavate using cupolae and antiprisms to form the tunnels
+            let mut inner_face = FaceIdx::new(0);
+            for decagon in poly.ngons(10) {
+                let next = poly.excavate_cupola(decagon, false);
+                inner_face = poly.excavate_antiprism(next);
+            }
+            // Excavate the central cavity, and color these edges
+            let mut inner = Polyhedron::dodecahedron();
+            inner.color_all_edges(INNER_COL);
+            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+
+            Model::with_colors("Stephanie (Coloring A)".to_owned(), poly, color_map)
+        },
+        {
+            const OUTER_COL: &str = "Outer";
+            let mut color_map = ColorMap::new();
+            color_map.insert(OUTER_COL.to_owned(), BLUE);
+
+            // Start with a colored truncated dodecahedron
+            let mut poly = Polyhedron::truncated_dodecahedron();
+            for tri in poly.ngons(3) {
+                poly.color_face(tri, OUTER_COL);
+            }
+            // Excavate using cupolae and antiprisms to form the tunnels
+            let mut inner_face = FaceIdx::new(0);
+            for decagon in poly.ngons(10) {
+                let next = poly.excavate_cupola(decagon, false);
+                inner_face = poly.excavate_antiprism(next);
+            }
+            // Excavate the central cavity, and color these edges
+            let inner = Polyhedron::dodecahedron();
+            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+
+            Model::with_colors("Stephanie (Coloring B)".to_owned(), poly, color_map)
+        },
+        {
+            const PENTAGONS: &str = "Outer";
+            let mut color_map = ColorMap::new();
+            color_map.insert(PENTAGONS.to_owned(), Color32::BLACK);
+
+            let mut poly = Polyhedron::truncated_icosahedron();
+            for face in poly.ngons(5) {
+                poly.color_face(face, PENTAGONS);
+            }
+
+            Model::with_colors("Football".to_owned(), poly, color_map)
+        },
+        {
+            const TUNNEL_COLOR: &str = "Tunnel";
+            let mut color_map = ColorMap::new();
+            color_map.insert(TUNNEL_COLOR.to_owned(), BLUE);
+
+            // Create a bicupola
+            let PrismLike {
+                mut poly,
+                bottom_face,
+                top_face,
+            } = Polyhedron::cupola(3);
+            let bottom_face = poly.extend_cupola(bottom_face, true);
+            let faces_to_add_pyramids = poly
+                .faces_enumerated()
+                .map(|(idx, _face)| idx)
+                .collect_vec();
+            // Dig tunnel, and color it blue
+            poly.color_edges_added_by(
+                |poly| {
+                    poly.excavate_antiprism(bottom_face);
+                    poly.excavate_antiprism(top_face);
+                },
+                TUNNEL_COLOR,
+            );
+            // Add pyramids to all faces in the bicupola which still exist
+            for face in faces_to_add_pyramids {
+                if poly.is_face(face) {
+                    poly.extend_pyramid(face);
+                }
+            }
+
+            Model::with_colors("Apanar Deltahedron".to_owned(), poly, color_map)
+        },
+        {
+            const TRI_COLOR_NAME: &str = "Triangle";
+            const SQUARE_COLOR_NAME: &str = "Square";
+            let mut color_map = ColorMap::new();
+            color_map.insert(TRI_COLOR_NAME.to_owned(), BLUE);
+            color_map.insert(SQUARE_COLOR_NAME.to_owned(), RED);
+
+            let poly = prism_extended_cuboctahedron(TRI_COLOR_NAME, SQUARE_COLOR_NAME);
+            Model::with_colors("Christopher".to_owned(), poly, color_map)
+        },
+    ];
+
+    toroids.to_vec()
+}
+
+fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedron {
+    // Make the pyramids out of which the cuboctahedron's faces will be constructed
+    let make_pyramid = |n: usize, color_name: &str| -> (Polyhedron, Vec<FaceIdx>) {
+        let Pyramid {
+            mut poly,
+            base_face,
+        } = Polyhedron::pyramid(n);
+        // Color the base face
+        let verts = &poly.get_face(base_face).verts().to_vec();
+        for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
+            poly.set_half_edge_color(v2, v1, color_name);
+        }
+        // Get the side faces
+        let side_faces = poly
+            .faces_enumerated()
+            .map(|(id, _)| id)
+            .filter(|id| *id != base_face)
+            .collect_vec();
+        (poly, side_faces)
+    };
+    let (tri_pyramid, tri_pyramid_side_faces) = make_pyramid(3, tri_color);
+    let (quad_pyramid, quad_pyramid_side_faces) = make_pyramid(4, square_color);
+
+    // Recursively build the polyhedron
+    let mut poly = quad_pyramid.clone();
+    let mut faces_to_expand = quad_pyramid_side_faces
+        .iter()
+        .map(|idx| (*idx, 3))
+        .collect_vec();
+    while let Some((face_to_extend, order_of_new_pyramid)) = faces_to_expand.pop() {
+        // Get which pyramid we're going to add
+        let (pyramid, side_faces, next_pyramid_order) = match order_of_new_pyramid {
+            3 => (&tri_pyramid, &tri_pyramid_side_faces, 4),
+            4 => (&quad_pyramid, &quad_pyramid_side_faces, 3),
+            _ => unreachable!(),
+        };
+
+        // Add prism and pyramid
+        if !poly.is_face(face_to_extend) {
+            continue; // Face has already been connected to something
+        }
+        let opposite_face = poly.extend_prism(face_to_extend);
+        if !poly.is_face(opposite_face) {
+            continue; // Connecting to something which already exists
+        }
+        let face_mapping = poly.extend(opposite_face, pyramid, side_faces[0], 2);
+
+        // Add new faces to extend
+        for &source_side_face in side_faces {
+            faces_to_expand.push((face_mapping[source_side_face], next_pyramid_order));
+        }
+    }
+
+    // Centre the polyhedron and return it
+    poly.make_centred();
+    poly
+}
+
+fn full_builtin_name(group_name: &str, model_name: &str) -> String {
+    format!("Built-in\\{}\\{}", group_name, model_name)
 }

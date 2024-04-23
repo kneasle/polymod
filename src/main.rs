@@ -17,7 +17,6 @@ use crate::{
 use model::{Model, OwUnitGeometry};
 
 mod model;
-mod model_tree;
 mod polyhedron;
 mod utils;
 mod viewport;
@@ -35,11 +34,11 @@ fn main() {
     .unwrap();
     let context = window.gl();
 
-    let mut models = model_tree::ModelTree::builtin().to_new_tree();
+    let mut models = crate::model::builtin_models();
 
     let mut current_model_idx: usize = models
         .iter()
-        .position(|m| m.name() == "Christopher")
+        .position(|m| m.name() == "Icosahedron")
         .expect("No model with this name found");
 
     // GUI variables
@@ -71,6 +70,7 @@ fn main() {
                             ScrollArea::vertical().show(ui, |ui| {
                                 ui.heading("Models");
                                 ModelTree::draw_gui(ui, &models, &mut current_model_idx);
+                                ui.separator();
                             })
                         });
                 left_panel_width = response.response.rect.width();
