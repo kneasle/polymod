@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use three_d::{
-    egui::{self, Rgba},
+    egui::{self, Color32},
     Vec3,
 };
 
@@ -194,6 +194,9 @@ impl ModelTree {
     }
 
     pub fn toroids() -> Self {
+        const BLUE: Color32 = Color32::from_rgb(51, 90, 255);
+        const RED: Color32 = Color32::from_rgb(255, 51, 90);
+
         let qpq_slash_p = |gyro: bool| -> Polyhedron {
             let PrismLike {
                 mut poly,
@@ -399,8 +402,8 @@ impl ModelTree {
                 const OUTER_COL: &str = "Outer";
                 const INNER_COL: &str = "Inner";
                 let mut color_map = ColorMap::new();
-                color_map.insert(OUTER_COL.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
-                color_map.insert(INNER_COL.to_owned(), Rgba::from_rgb(1.0, 0.2, 0.35));
+                color_map.insert(OUTER_COL.to_owned(), BLUE);
+                color_map.insert(INNER_COL.to_owned(), RED);
 
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
@@ -421,7 +424,7 @@ impl ModelTree {
             {
                 const OUTER_COL: &str = "Outer";
                 let mut color_map = ColorMap::new();
-                color_map.insert(OUTER_COL.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
+                color_map.insert(OUTER_COL.to_owned(), BLUE);
 
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
@@ -443,7 +446,7 @@ impl ModelTree {
             {
                 const PENTAGONS: &str = "Outer";
                 let mut color_map = ColorMap::new();
-                color_map.insert(PENTAGONS.to_owned(), Rgba::BLACK);
+                color_map.insert(PENTAGONS.to_owned(), Color32::BLACK);
 
                 let mut poly = Polyhedron::truncated_icosahedron();
                 for face in poly.ngons(5) {
@@ -455,7 +458,7 @@ impl ModelTree {
             {
                 const TUNNEL_COLOR: &str = "Tunnel";
                 let mut color_map = ColorMap::new();
-                color_map.insert(TUNNEL_COLOR.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
+                color_map.insert(TUNNEL_COLOR.to_owned(), BLUE);
 
                 // Create a bicupola
                 let PrismLike {
@@ -489,8 +492,8 @@ impl ModelTree {
                 const TRI_COLOR_NAME: &str = "Triangle";
                 const SQUARE_COLOR_NAME: &str = "Square";
                 let mut color_map = ColorMap::new();
-                color_map.insert(TRI_COLOR_NAME.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
-                color_map.insert(SQUARE_COLOR_NAME.to_owned(), Rgba::from_rgb(1.0, 0.2, 0.35));
+                color_map.insert(TRI_COLOR_NAME.to_owned(), BLUE);
+                color_map.insert(SQUARE_COLOR_NAME.to_owned(), RED);
 
                 let poly = prism_extended_cuboctahedron(TRI_COLOR_NAME, SQUARE_COLOR_NAME);
                 Model::with_colors("Christopher", poly, color_map)

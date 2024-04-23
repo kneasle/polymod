@@ -7,7 +7,7 @@ use std::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use three_d::{
-    egui::{self, Rgba},
+    egui::{self, Color32},
     vec3, Angle, CpuMesh, Deg, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4,
     Positions, Quat, Rad, Radians, Vec3,
 };
@@ -29,19 +29,15 @@ pub struct Model {
 
     polyhedron: Polyhedron,
 
-    // Coloring
-    default_color: Rgba,
+    // Display settings & Coloring
+    view_geometry_settings: ViewGeomSettings,
+    default_color: Color32,
     colors: ColorMap,
-
-    // Display settings
-    view_settings: ModelViewSettings,
 }
 
-pub type ColorMap = IndexMap<String, Rgba>;
+pub type ColorMap = IndexMap<String, Color32>;
 
 impl Model {
-    pub const DEFAULT_COLOR: Rgba = Rgba::from_rgb(0.4, 0.4, 0.4);
-
     pub fn new(name: &str, poly: Polyhedron) -> Self {
         Self::with_colors(name, poly, ColorMap::new())
     }
@@ -52,10 +48,10 @@ impl Model {
 
             name: name.to_owned(),
             polyhedron: poly,
-            default_color: Self::DEFAULT_COLOR,
-            colors,
 
-            view_settings: ModelViewSettings::default(),
+            view_geometry_settings: ViewGeomSettings::default(),
+            default_color: Color32::GRAY,
+            colors,
         }
     }
 
@@ -79,30 +75,30 @@ impl Model {
         self.id = id;
     }
 
-    pub fn view_settings(&self) -> &ModelViewSettings {
-        &self.view_settings
+    pub fn view_geometry_settings(&self) -> &ViewGeomSettings {
+        &self.view_geometry_settings
     }
 
-    pub fn draw_view_gui(&mut self, ui: &mut egui::Ui) {
-        self.view_settings.gui(ui);
+    pub fn draw_view_geom_gui(&mut self, ui: &mut egui::Ui) {
+        self.view_geometry_settings.gui(ui);
     }
 
     /* HELPERS */
 
-    pub fn get_edge_side_color(&self, v1: VertIdx, v2: VertIdx) -> egui::Rgba {
+    pub fn get_edge_side_color(&self, v1: VertIdx, v2: VertIdx) -> Color32 {
         let color_name = self.polyhedron.get_edge_side_color(v1, v2);
         *color_name
             .and_then(|name| self.colors.get(name))
             .unwrap_or(&self.default_color)
     }
 
-    pub fn get_mixed_edge_color(&self, v1: VertIdx, v2: VertIdx) -> egui::Rgba {
+    pub fn get_mixed_edge_color(&self, v1: VertIdx, v2: VertIdx) -> Color32 {
         let left_color = self.get_edge_side_color(v1, v2);
         let right_color = self.get_edge_side_color(v2, v1);
         lerp_color(left_color, right_color, 0.5)
     }
 
-    pub fn get_color(&self, color: Option<&str>) -> egui::Rgba {
+    pub fn get_color(&self, color: Option<&str>) -> Color32 {
         *color
             .and_then(|name| self.colors.get(name))
             .unwrap_or(&self.default_color)
@@ -114,8 +110,8 @@ impl Model {
 /////////////
 
 #[derive(Debug, Clone)]
-pub struct ModelViewSettings {
-    pub style: ModelViewStyle,
+pub struct ViewGeomSettings {
+    pub style: FaceGeomStyle,
     // Flat ow-like unit
     pub side_ratio: f32,
     // Ow-like unit
@@ -130,7 +126,7 @@ pub struct ModelViewSettings {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ModelViewStyle {
+pub enum FaceGeomStyle {
     None,
     Solid,
     OwLikeFlat,
@@ -147,10 +143,10 @@ pub enum OwUnit {
     Deg135,
 }
 
-impl Default for ModelViewSettings {
+impl Default for ViewGeomSettings {
     fn default() -> Self {
-        ModelViewSettings {
-            style: ModelViewStyle::Solid,
+        ViewGeomSettings {
+            style: FaceGeomStyle::Solid,
             side_ratio: 0.25,
 
             paper_ratio_w: 3,
@@ -165,16 +161,16 @@ impl Default for ModelViewSettings {
     }
 }
 
-impl ModelViewSettings {
+impl ViewGeomSettings {
     pub fn face_render_style(&self) -> Option<FaceRenderStyle> {
         Some(match self.style {
-            ModelViewStyle::None => return None,
-            ModelViewStyle::Solid => FaceRenderStyle::Solid,
-            ModelViewStyle::OwLikeFlat => FaceRenderStyle::OwLike {
+            FaceGeomStyle::None => return None,
+            FaceGeomStyle::Solid => FaceRenderStyle::Solid,
+            FaceGeomStyle::OwLikeFlat => FaceRenderStyle::OwLike {
                 side_ratio: self.side_ratio,
                 fixed_angle: None,
             },
-            ModelViewStyle::OwLikeAngled => {
+            FaceGeomStyle::OwLikeAngled => {
                 // Model the geometry of the unit
                 let OwUnitGeometry {
                     paper_aspect,
@@ -196,7 +192,7 @@ impl ModelViewSettings {
     }
 
     pub fn ow_unit_geometry(&self) -> Option<OwUnitGeometry> {
-        (self.style == ModelViewStyle::OwLikeAngled)
+        (self.style == FaceGeomStyle::OwLikeAngled)
             .then(|| self.unit.geometry(self.paper_aspect_ratio()))
     }
 
@@ -206,11 +202,11 @@ impl ModelViewSettings {
 
     pub fn gui(&mut self, ui: &mut egui::Ui) {
         ui.strong("Faces");
-        ui.radio_value(&mut self.style, ModelViewStyle::None, "None");
-        ui.radio_value(&mut self.style, ModelViewStyle::Solid, "Solid");
+        ui.radio_value(&mut self.style, FaceGeomStyle::None, "None");
+        ui.radio_value(&mut self.style, FaceGeomStyle::Solid, "Solid");
         ui.radio_value(
             &mut self.style,
-            ModelViewStyle::OwLikeFlat,
+            FaceGeomStyle::OwLikeFlat,
             "Ow-like edge unit (flat)",
         );
         ui.indent("ow-like-flat", |ui| {
@@ -221,7 +217,7 @@ impl ModelViewSettings {
         });
         ui.radio_value(
             &mut self.style,
-            ModelViewStyle::OwLikeAngled,
+            FaceGeomStyle::OwLikeAngled,
             "Ow-like edge unit",
         );
         ui.indent("ow-like-angled", |ui| {
@@ -357,7 +353,7 @@ pub struct FixedAngle {
 
 impl Model {
     pub fn face_mesh(&self) -> Option<CpuMesh> {
-        let style = self.view_settings.face_render_style()?;
+        let style = self.view_geometry_settings.face_render_style()?;
         Some(self.face_mesh_with_style(style))
     }
 
@@ -398,7 +394,7 @@ impl Model {
         mesh
     }
 
-    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(egui::Rgba, Vec<Vec3>)> {
+    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(Color32, Vec<Vec3>)> {
         let mut faces_to_render = Vec::new();
         for face in self.polyhedron.faces() {
             // Decide how to render them, according to the style
@@ -433,7 +429,7 @@ impl Model {
         face: &Face,
         side_ratio: f32,
         fixed_angle: Option<FixedAngle>,
-        faces_to_render: &mut Vec<(egui::Rgba, Vec<Vec3>)>,
+        faces_to_render: &mut Vec<(Color32, Vec<Vec3>)>,
     ) {
         // Geometry calculations
         let normal = face.normal(&self.polyhedron);
@@ -497,9 +493,7 @@ impl Model {
         in_directions
     }
 
-    fn triangulate_mesh(
-        faces: Vec<(egui::Rgba, Vec<Vec3>)>,
-    ) -> (Vec<Vec3>, Vec<egui::Rgba>, Vec<u32>) {
+    fn triangulate_mesh(faces: Vec<(Color32, Vec<Vec3>)>) -> (Vec<Vec3>, Vec<Color32>, Vec<u32>) {
         let mut verts = Vec::new();
         let mut colors = Vec::new();
         let mut tri_indices = Vec::new();
@@ -535,7 +529,10 @@ impl Model {
             .transform(&Mat4::from_nonuniform_scale(1.0, EDGE_RADIUS, EDGE_RADIUS))
             .unwrap();
 
-        let edges = self.edge_instances(self.view_settings.wireframe_edges, edges_to_highlight);
+        let edges = self.edge_instances(
+            self.view_geometry_settings.wireframe_edges,
+            edges_to_highlight,
+        );
         InstancedMesh::new(context, &edges, &cylinder)
     }
 
@@ -554,7 +551,7 @@ impl Model {
 
             let edge_color = self.get_mixed_edge_color(edge.bottom_vert, edge.top_vert);
             let color = match is_highlighted {
-                true => lerp_color(edge_color, egui::Rgba::WHITE, HIGHLIGHT_BRIGHTNESS),
+                true => lerp_color(edge_color, Color32::WHITE, HIGHLIGHT_BRIGHTNESS),
                 false => darken_color(edge_color, WIREFRAME_TINT),
             };
             colors.push(egui_color_to_srgba(color));
@@ -574,14 +571,16 @@ impl Model {
     /* VERTICES */
 
     pub fn vertex_mesh(&self, context: &three_d::Context) -> InstancedMesh {
-        let radius = match self.view_settings.wireframe_verts {
+        let radius = match self.view_geometry_settings.wireframe_verts {
             true => VERTEX_RADIUS,
             false => EDGE_RADIUS,
         };
         let mut sphere = CpuMesh::sphere(8);
         sphere.transform(&Mat4::from_scale(radius)).unwrap();
 
-        let verts = if self.view_settings.wireframe_edges || self.view_settings.wireframe_verts {
+        let verts = if self.view_geometry_settings.wireframe_edges
+            || self.view_geometry_settings.wireframe_verts
+        {
             self.vertex_instances()
         } else {
             Instances::default()
@@ -591,7 +590,7 @@ impl Model {
 
     fn vertex_instances(&self) -> Instances {
         let verts = &self.polyhedron.vert_positions();
-        let color = egui_color_to_srgba(darken_color(Self::DEFAULT_COLOR, WIREFRAME_TINT));
+        let color = egui_color_to_srgba(darken_color(self.default_color, WIREFRAME_TINT));
         Instances {
             transformations: verts
                 .iter()

@@ -1,7 +1,10 @@
 use std::cmp::Ordering;
 
 use ordered_float::OrderedFloat;
-use three_d::{egui, Angle, InnerSpace, Radians, Srgba, Vec3};
+use three_d::{
+    egui::{self, Color32},
+    Angle, InnerSpace, Radians, Srgba, Vec3,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -41,22 +44,26 @@ pub fn angle_in_spherical_triangle(a: Radians, b: Radians, c: Radians) -> Radian
     Radians::acos(cos_angle)
 }
 
-pub fn darken_color(c: egui::Rgba, factor: f32) -> egui::Rgba {
-    egui::Rgba::from_rgba_premultiplied(c.r() * factor, c.g() * factor, c.b() * factor, c.a())
+pub fn darken_color(c: Color32, factor: f32) -> Color32 {
+    lerp_color(Color32::BLACK, c, factor)
 }
 
-pub fn lerp_color(a: egui::Rgba, b: egui::Rgba, factor: f32) -> egui::Rgba {
-    a * (1.0 - factor) + b * factor
+pub fn lerp_color(a: Color32, b: Color32, factor: f32) -> Color32 {
+    let lerp = |a: u8, b: u8| -> u8 {
+        let lerped_f32 = (a as f32) * (1.0 - factor) + (b as f32) * factor;
+        lerped_f32 as u8
+    };
+    Color32::from_rgba_premultiplied(
+        lerp(a.r(), b.r()),
+        lerp(a.g(), b.g()),
+        lerp(a.b(), b.b()),
+        lerp(a.a(), b.a()),
+    )
 }
 
-pub fn egui_color_to_srgba(c: egui::Rgba) -> Srgba {
-    let [r, g, b, a] = c.to_rgba_unmultiplied();
-    Srgba {
-        r: (r * 255.0) as u8,
-        g: (g * 255.0) as u8,
-        b: (b * 255.0) as u8,
-        a: (a * 255.0) as u8,
-    }
+pub fn egui_color_to_srgba(c: Color32) -> Srgba {
+    let [r, g, b, a] = c.to_srgba_unmultiplied();
+    Srgba { r, g, b, a }
 }
 
 #[derive(Debug, Clone, Copy)]

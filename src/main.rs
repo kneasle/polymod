@@ -15,7 +15,7 @@ use crate::{
     utils::ngon_name,
 };
 
-use model::{Model, ModelViewSettings};
+use model::{Model, OwUnitGeometry};
 
 mod model;
 mod model_tree;
@@ -102,8 +102,8 @@ fn main() {
                                         });
 
                                         ui.add_space(SMALL_SPACE);
-                                        ui.heading("View Settings");
-                                        model.draw_view_gui(ui);
+                                        ui.heading("Geometry View");
+                                        model.draw_view_geom_gui(ui);
                                     }
                                     None => {
                                         ui.label("Built-in models can't be edited.");
@@ -124,7 +124,7 @@ fn main() {
                                 ui.heading("Properties");
                                 model_properties_gui(
                                     current_model.polyhedron(),
-                                    current_model.view_settings(),
+                                    current_model.view_geometry_settings().ow_unit_geometry(),
                                     &mut paper_width,
                                     ui,
                                 );
@@ -168,7 +168,7 @@ fn main() {
 
 fn model_properties_gui(
     polyhedron: &Polyhedron,
-    view_settings: &ModelViewSettings,
+    ow_unit_geometry: Option<OwUnitGeometry>,
     paper_width: &mut f32,
     ui: &mut egui::Ui,
 ) {
@@ -199,7 +199,7 @@ fn model_properties_gui(
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
             ui.label(format!("{:.2} edge lengths", r * 2.0));
-            if let Some(geom) = view_settings.ow_unit_geometry() {
+            if let Some(geom) = ow_unit_geometry {
                 let real_diameter = r * 2.0 * geom.spine_length_factor * *paper_width;
                 ui.label(format!(", or {:.2}cm if folded from ", real_diameter));
                 ui.add(
