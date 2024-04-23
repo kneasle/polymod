@@ -3,14 +3,13 @@ use std::{
     collections::{BTreeMap, HashSet},
 };
 
+use indexmap::IndexMap;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use polyhedron::{EdgeAngleType, EdgeId, FaceIdx, Polyhedron, VertIdx};
 use three_d::{egui::RichText, *};
 
 use crate::{
-    model::ModelId,
-    model_tree::ModelTree,
     polyhedron::{ClosedEdgeData, Edge},
     utils::ngon_name,
 };
@@ -36,13 +35,12 @@ fn main() {
     .unwrap();
     let context = window.gl();
 
-    let mut custom_tree = ModelTree::new_group("Custom Models", []);
-    let builtin_tree = ModelTree::builtin();
+    let mut models = model_tree::ModelTree::builtin().to_new_tree();
 
-    let mut current_model_id = builtin_tree
-        .get_model_with_name("Christopher")
-        .expect("No model with this name found")
-        .id();
+    let mut current_model_idx: usize = models
+        .iter()
+        .position(|m| m.name() == "Christopher")
+        .expect("No model with this name found");
 
     // GUI variables
     let mut show_external_angles = false;
@@ -54,15 +52,6 @@ fn main() {
     // Main loop
     let mut gui = three_d::GUI::new(&context);
     window.render_loop(move |mut frame_input| {
-        macro_rules! current_model {
-            () => {{
-                match custom_tree.get_model_with_id(current_model_id) {
-                    Some(m) => m,
-                    None => builtin_tree.get_model_with_id(current_model_id).unwrap(),
-                }
-            }};
-        }
-
         // Render GUI
         let mut left_panel_width = 0.0;
         let mut right_panel_width = 0.0;
@@ -80,10 +69,8 @@ fn main() {
                         .min_width(300.0)
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
-                                custom_tree.tree_gui(ui, &mut current_model_id);
-                                ui.add_space(BIG_SPACE);
-                                ui.separator();
-                                builtin_tree.tree_gui(ui, &mut current_model_id);
+                                ui.heading("Models");
+                                ModelTree::draw_gui(ui, &models, &mut current_model_idx);
                             })
                         });
                 left_panel_width = response.response.rect.width();
@@ -93,49 +80,30 @@ fn main() {
                         .min_width(250.0)
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
-                                match custom_tree.get_mut_model_with_id(current_model_id) {
-                                    Some(model) => {
-                                        ui.heading("General Model Settings");
-                                        ui.horizontal(|ui| {
-                                            ui.label("Name:");
-                                            ui.text_edit_singleline(model.name_mut());
-                                        });
-
-                                        ui.add_space(SMALL_SPACE);
-                                        ui.heading("Geometry View");
-                                        model.draw_view_geom_gui(ui);
-
-                                        ui.add_space(SMALL_SPACE);
-                                        ui.heading("Colors");
-                                        model.draw_colors_gui(ui);
-                                    }
-                                    None => {
-                                        ui.label("Built-in models can't be edited.");
-                                        ui.label("Clone the model to edit it:");
-                                        if ui.button("Clone model").clicked() {
-                                            let mut new_model = current_model!().clone();
-                                            current_model_id = ModelId::next_unique();
-                                            new_model.set_id(current_model_id);
-                                            custom_tree.add(new_model);
-                                        }
-                                    }
-                                }
-
+                                let model = &mut models[current_model_idx];
+                                ui.heading("General Model Settings");
+                                ui.horizontal(|ui| {
+                                    ui.label("Name:");
+                                    ui.text_edit_singleline(model.full_name_mut());
+                                });
+                                ui.add_space(SMALL_SPACE);
+                                ui.heading("View");
+                                model.draw_view_geom_gui(ui);
                                 ui.add_space(BIG_SPACE);
                                 ui.separator();
 
-                                let current_model = current_model!();
+                                // Model properties
                                 ui.heading("Properties");
                                 model_properties_gui(
-                                    current_model.polyhedron(),
-                                    current_model.view_geometry_settings().ow_unit_geometry(),
+                                    model.polyhedron(),
+                                    model.view_geometry_settings().ow_unit_geometry(),
                                     &mut paper_width,
                                     ui,
                                 );
                                 ui.add_space(SMALL_SPACE);
                                 ui.heading("Geometry Breakdown");
                                 edges_to_highlight =
-                                    model_geom_gui(current_model, &mut show_external_angles, ui);
+                                    model_geom_gui(model, &mut show_external_angles, ui);
                             });
                         });
                 right_panel_width = response.response.rect.width();
@@ -158,7 +126,7 @@ fn main() {
         if redraw {
             let screen = frame_input.screen();
             screen.clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0));
-            view.render(current_model!(), &edges_to_highlight, &screen);
+            view.render(&models[current_model_idx], &edges_to_highlight, &screen);
             screen.write(|| gui.render());
         }
 
@@ -169,6 +137,61 @@ fn main() {
         }
     });
 }
+
+////////////////////
+// MODEL TREE GUI //
+////////////////////
+
+#[derive(Debug, Default)]
+struct ModelTree<'models> {
+    groups: IndexMap<&'models str, ModelTree<'models>>,
+    models: IndexMap<&'models str, usize>,
+}
+
+impl<'models> ModelTree<'models> {
+    pub fn draw_gui(ui: &mut egui::Ui, models: &[Model], current_model_id: &mut usize) {
+        // Build these models into a tree (working backwards so the most recent models appear at
+        // the top of the GUI)
+        let mut tree = Self::default();
+        for (idx, model) in models.iter().enumerate() {
+            tree.add_model(idx, model);
+        }
+        // Draw the GUI based on that tree
+        tree.recursive_draw_gui(ui, current_model_id);
+    }
+
+    fn add_model(&mut self, idx: usize, model: &'models Model) {
+        // Traverse down the `ModelTree` based on the path, creating tree branches as needed
+        let mut current_tree = self;
+        for path_elem in model.path() {
+            current_tree = current_tree.groups.entry(path_elem).or_default();
+        }
+        // Now, we've consumed the model's path, so `current_tree` is a reference to the
+        // model's direct parent
+        current_tree.models.insert(model.name(), idx);
+    }
+
+    fn recursive_draw_gui(&self, ui: &mut egui::Ui, current_model_idx: &mut usize) {
+        // Recursively draw all groups first
+        for (&name, group) in &self.groups {
+            ui.collapsing(name, |ui| group.recursive_draw_gui(ui, current_model_idx));
+        }
+        // Now draw all models
+        for (&name, idx) in &self.models {
+            if idx == current_model_idx {
+                ui.strong(name);
+            } else {
+                if ui.button(name).clicked() {
+                    *current_model_idx = *idx;
+                }
+            }
+        }
+    }
+}
+
+/////////////////////
+// RIGHT PANEL GUI //
+/////////////////////
 
 fn model_properties_gui(
     polyhedron: &Polyhedron,

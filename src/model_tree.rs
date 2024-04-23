@@ -1,11 +1,8 @@
 use itertools::Itertools;
-use three_d::{
-    egui::{self, Color32},
-    Vec3,
-};
+use three_d::{egui::Color32, Vec3};
 
 use crate::{
-    model::{ColorMap, Model, ModelId},
+    model::{ColorMap, Model},
     polyhedron::{FaceIdx, Polyhedron, PrismLike, Pyramid},
 };
 
@@ -19,78 +16,23 @@ pub enum ModelTree {
 }
 
 impl ModelTree {
-    pub fn get_model_with_id(&self, id: ModelId) -> Option<&Model> {
-        self.flatten().into_iter().find(|m| m.id() == id)
-    }
-
-    pub fn get_mut_model_with_id(&mut self, id: ModelId) -> Option<&mut Model> {
-        self.flatten_mut().into_iter().find(|m| m.id() == id)
-    }
-
-    pub fn get_model_with_name<'s>(&'s self, name: &str) -> Option<&'s Model> {
-        self.flatten().into_iter().find(|m| m.name() == name)
-    }
-
-    pub fn flatten_mut(&mut self) -> Vec<&mut Model> {
-        let mut models = Vec::new();
-        self.flatten_recursive_mut(&mut models);
-        models
-    }
-
-    fn flatten_recursive_mut<'s>(&'s mut self, vec: &mut Vec<&'s mut Model>) {
+    pub fn to_new_tree(&self) -> Vec<Model> {
         match self {
-            ModelTree::Model(m) => vec.push(m),
-            ModelTree::Group { name: _, children } => {
-                for child in children {
-                    child.flatten_recursive_mut(vec);
+            ModelTree::Model(model) => vec![model.clone()],
+            ModelTree::Group {
+                name: group_name,
+                children,
+            } => {
+                let mut models = children.iter().flat_map(Self::to_new_tree).collect_vec();
+                for model in &mut models {
+                    // Add this level's name to the front of the model's path
+                    let mut new_name = group_name.to_owned();
+                    new_name.push(Model::PATH_DELIMITER);
+                    new_name.push_str(model.full_name());
+                    // Set this to be the model's new path
+                    *model.full_name_mut() = new_name;
                 }
-            }
-        }
-    }
-
-    pub fn flatten(&self) -> Vec<&Model> {
-        let mut models = Vec::new();
-        self.flatten_recursive(&mut models);
-        models
-    }
-
-    fn flatten_recursive<'s>(&'s self, vec: &mut Vec<&'s Model>) {
-        match self {
-            ModelTree::Model(m) => vec.push(m),
-            ModelTree::Group { name: _, children } => {
-                for child in children {
-                    child.flatten_recursive(vec);
-                }
-            }
-        }
-    }
-
-    pub fn add(&mut self, model: Model) {
-        match self {
-            ModelTree::Model(_) => panic!("Can't add a model to a non-group"),
-            ModelTree::Group { name: _, children } => children.push(Self::Model(model)),
-        }
-    }
-
-    pub fn tree_gui(&self, ui: &mut egui::Ui, current_model_id: &mut ModelId) {
-        match self {
-            ModelTree::Group { name, children } => {
-                egui::CollapsingHeader::new(name)
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        for child in children {
-                            child.tree_gui(ui, current_model_id);
-                        }
-                    });
-            }
-            ModelTree::Model(m) => {
-                if m.id() == *current_model_id {
-                    ui.strong(m.name());
-                } else {
-                    if ui.button(m.name()).clicked() {
-                        *current_model_id = m.id();
-                    }
-                }
+                models
             }
         }
     }

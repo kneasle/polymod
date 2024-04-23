@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    f32::consts::PI,
-    sync::atomic::{AtomicU32, Ordering},
-};
+use std::{collections::HashSet, f32::consts::PI};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -24,8 +20,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Model {
-    id: ModelId,
-    name: String,
+    full_name: String,
 
     polyhedron: Polyhedron,
 
@@ -44,9 +39,7 @@ impl Model {
 
     pub fn with_colors(name: &str, poly: Polyhedron, colors: ColorMap) -> Self {
         Self {
-            id: ModelId::next_unique(),
-
-            name: name.to_owned(),
+            full_name: name.to_owned(),
             polyhedron: poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
@@ -55,24 +48,39 @@ impl Model {
         }
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn full_name(&self) -> &str {
+        &self.full_name
     }
 
-    pub fn name_mut(&mut self) -> &mut String {
-        &mut self.name
+    pub fn full_name_mut(&mut self) -> &mut String {
+        &mut self.full_name
+    }
+
+    pub const PATH_DELIMITER: char = '\\';
+
+    /// Returns the path of this `Model` by interpreting its `full_name` as a path delimited by
+    /// back-slashes.  Note that this does not include the final segment of `full_name`, as that
+    /// is considered the model's `name`.
+    ///
+    /// I.e. a model with name `r"Built-In\Platonic\Cube"` would return a path of
+    /// `["Built-In", "Platonic"]`.  The model's `name` is `"Cube"`
+    pub fn path(&self) -> Vec<&str> {
+        let mut path = self.full_name.split(Self::PATH_DELIMITER).collect_vec();
+        path.pop(); // Remove name from the end of path
+        path
+    }
+
+    /// Just the `name` of this model.  I.e. this is `full_name` but with the initial `path`
+    /// segments removed.
+    pub fn name(&self) -> &str {
+        self.full_name()
+            .split(Self::PATH_DELIMITER)
+            .next_back()
+            .unwrap()
     }
 
     pub fn polyhedron(&self) -> &Polyhedron {
         &self.polyhedron
-    }
-
-    pub fn id(&self) -> ModelId {
-        self.id
-    }
-
-    pub fn set_id(&mut self, id: ModelId) {
-        self.id = id;
     }
 
     pub fn view_geometry_settings(&self) -> &ViewGeomSettings {
@@ -81,9 +89,12 @@ impl Model {
 
     pub fn draw_view_geom_gui(&mut self, ui: &mut egui::Ui) {
         self.view_geometry_settings.gui(ui);
+        ui.add_space(SMALL_SPACE);
+        ui.strong("Colors");
+        self.draw_colors_gui(ui);
     }
 
-    pub fn draw_colors_gui(&mut self, ui: &mut egui::Ui) {
+    fn draw_colors_gui(&mut self, ui: &mut egui::Ui) {
         let mut draw_color = |col: &mut Color32, label: &str| {
             ui.horizontal(|ui| {
                 ui.color_edit_button_srgba(col);
@@ -636,17 +647,4 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
             None,
         ))
         * Mat4::from_nonuniform_scale((p1 - p2).magnitude(), 1.0, 1.0)
-}
-
-/// An identifier for a specific model
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ModelId(pub u32);
-
-static NEXT_ID: AtomicU32 = AtomicU32::new(0);
-
-impl ModelId {
-    pub fn next_unique() -> Self {
-        let next_int = NEXT_ID.fetch_add(1, Ordering::SeqCst);
-        Self(next_int)
-    }
 }
