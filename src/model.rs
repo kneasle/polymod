@@ -4,14 +4,16 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
+use indexmap::IndexMap;
 use itertools::Itertools;
 use three_d::{
-    egui, vec3, Angle, CpuMesh, Deg, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4,
+    egui::{self, Rgba},
+    vec3, Angle, CpuMesh, Deg, Degrees, Indices, InnerSpace, InstancedMesh, Instances, Mat4,
     Positions, Quat, Rad, Radians, Vec3,
 };
 
 use crate::{
-    polyhedron::EdgeId,
+    polyhedron::{EdgeId, VertIdx},
     utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba, lerp_color},
 };
 use crate::{
@@ -23,21 +25,35 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Model {
     id: ModelId,
-
     name: String,
+
     polyhedron: Polyhedron,
+
+    // Coloring
+    default_color: Rgba,
+    colors: ColorMap,
 
     // Display settings
     view_settings: ModelViewSettings,
 }
 
+pub type ColorMap = IndexMap<String, Rgba>;
+
 impl Model {
+    pub const DEFAULT_COLOR: Rgba = Rgba::from_rgb(0.4, 0.4, 0.4);
+
     pub fn new(name: &str, poly: Polyhedron) -> Self {
+        Self::with_colors(name, poly, ColorMap::new())
+    }
+
+    pub fn with_colors(name: &str, poly: Polyhedron, colors: ColorMap) -> Self {
         Self {
             id: ModelId::next_unique(),
 
             name: name.to_owned(),
             polyhedron: poly,
+            default_color: Self::DEFAULT_COLOR,
+            colors,
 
             view_settings: ModelViewSettings::default(),
         }
@@ -69,6 +85,27 @@ impl Model {
 
     pub fn draw_view_gui(&mut self, ui: &mut egui::Ui) {
         self.view_settings.gui(ui);
+    }
+
+    /* HELPERS */
+
+    pub fn get_edge_side_color(&self, v1: VertIdx, v2: VertIdx) -> egui::Rgba {
+        let color_name = self.polyhedron.get_edge_side_color(v1, v2);
+        *color_name
+            .and_then(|name| self.colors.get(name))
+            .unwrap_or(&self.default_color)
+    }
+
+    pub fn get_mixed_edge_color(&self, v1: VertIdx, v2: VertIdx) -> egui::Rgba {
+        let left_color = self.get_edge_side_color(v1, v2);
+        let right_color = self.get_edge_side_color(v2, v1);
+        lerp_color(left_color, right_color, 0.5)
+    }
+
+    pub fn get_color(&self, color: Option<&str>) -> egui::Rgba {
+        *color
+            .and_then(|name| self.colors.get(name))
+            .unwrap_or(&self.default_color)
     }
 }
 
@@ -375,7 +412,7 @@ impl Model {
                             self.polyhedron.vert_pos(*v1),
                             self.polyhedron.vert_pos(*v2),
                         ];
-                        let color = self.polyhedron.edge_side_color(*v2, *v1);
+                        let color = self.get_edge_side_color(*v2, *v1);
                         faces_to_render.push((color, verts));
                     }
                 }
@@ -410,7 +447,7 @@ impl Model {
             .zip_eq(&in_directions);
         for (((i0, v0), in0), ((i1, v1), in1)) in verts_and_ins.circular_tuple_windows() {
             // Extract useful data
-            let edge_color = self.polyhedron.edge_side_color(*i1, *i0);
+            let edge_color = self.get_edge_side_color(*i1, *i0);
             let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
 
             match fixed_angle {
@@ -515,9 +552,7 @@ impl Model {
                 continue;
             }
 
-            let edge_color = self
-                .polyhedron
-                .mixed_edge_color(edge.bottom_vert, edge.top_vert);
+            let edge_color = self.get_mixed_edge_color(edge.bottom_vert, edge.top_vert);
             let color = match is_highlighted {
                 true => lerp_color(edge_color, egui::Rgba::WHITE, HIGHLIGHT_BRIGHTNESS),
                 false => darken_color(edge_color, WIREFRAME_TINT),
@@ -556,7 +591,7 @@ impl Model {
 
     fn vertex_instances(&self) -> Instances {
         let verts = &self.polyhedron.vert_positions();
-        let color = egui_color_to_srgba(darken_color(Polyhedron::DEFAULT_COLOR, WIREFRAME_TINT));
+        let color = egui_color_to_srgba(darken_color(Self::DEFAULT_COLOR, WIREFRAME_TINT));
         Instances {
             transformations: verts
                 .iter()

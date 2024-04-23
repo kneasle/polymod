@@ -5,7 +5,7 @@ use three_d::{
 };
 
 use crate::{
-    model::{Model, ModelId},
+    model::{ColorMap, Model, ModelId},
     polyhedron::{FaceIdx, Polyhedron, PrismLike, Pyramid},
 };
 
@@ -395,11 +395,16 @@ impl ModelTree {
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
                 poly
             }),
-            Model::new("Stephanie (Colouring A)", {
+            {
+                const OUTER_COL: &str = "Outer";
+                const INNER_COL: &str = "Inner";
+                let mut color_map = ColorMap::new();
+                color_map.insert(OUTER_COL.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
+                color_map.insert(INNER_COL.to_owned(), Rgba::from_rgb(1.0, 0.2, 0.35));
+
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
-                let outer_col = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
-                poly.colour_all_edges(outer_col);
+                poly.colour_all_edges(OUTER_COL);
                 // Excavate using cupolae and antiprisms to form the tunnels
                 let mut inner_face = FaceIdx::new(0);
                 for decagon in poly.ngons(10) {
@@ -408,17 +413,20 @@ impl ModelTree {
                 }
                 // Excavate the central cavity, and color these edges
                 let mut inner = Polyhedron::dodecahedron();
-                let inner_col = inner.add_color(egui::Rgba::from_rgb(1.0, 0.2, 0.35));
-                inner.colour_all_edges(inner_col);
+                inner.colour_all_edges(INNER_COL);
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-                poly
-            }),
-            Model::new("Stephanie (Colouring B)", {
+
+                Model::with_colors("Stephanie (Colouring A)", poly, color_map)
+            },
+            {
+                const OUTER_COL: &str = "Outer";
+                let mut color_map = ColorMap::new();
+                color_map.insert(OUTER_COL.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
+
                 // Start with a coloured truncated dodecahedron
                 let mut poly = Polyhedron::truncated_dodecahedron();
-                let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
                 for tri in poly.ngons(3) {
-                    poly.color_face(tri, blue);
+                    poly.color_face(tri, OUTER_COL);
                 }
                 // Excavate using cupolae and antiprisms to form the tunnels
                 let mut inner_face = FaceIdx::new(0);
@@ -429,17 +437,26 @@ impl ModelTree {
                 // Excavate the central cavity, and color these edges
                 let inner = Polyhedron::dodecahedron();
                 poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-                poly
-            }),
-            Model::new("Football", {
+
+                Model::with_colors("Stephanie (Colouring B)", poly, color_map)
+            },
+            {
+                const PENTAGONS: &str = "Outer";
+                let mut color_map = ColorMap::new();
+                color_map.insert(PENTAGONS.to_owned(), Rgba::BLACK);
+
                 let mut poly = Polyhedron::truncated_icosahedron();
-                let black = poly.add_color(Rgba::BLACK);
                 for face in poly.ngons(5) {
-                    poly.color_face(face, black);
+                    poly.color_face(face, PENTAGONS);
                 }
-                poly
-            }),
-            Model::new("Apanar Deltahedron", {
+
+                Model::with_colors("Football", poly, color_map)
+            },
+            {
+                const TUNNEL_COLOR: &str = "Tunnel";
+                let mut color_map = ColorMap::new();
+                color_map.insert(TUNNEL_COLOR.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
+
                 // Create a bicupola
                 let PrismLike {
                     mut poly,
@@ -452,13 +469,12 @@ impl ModelTree {
                     .map(|(idx, _face)| idx)
                     .collect_vec();
                 // Dig tunnel, and colour it blue
-                let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
                 poly.color_edges_added_by(
                     |poly| {
                         poly.excavate_antiprism(bottom_face);
                         poly.excavate_antiprism(top_face);
                     },
-                    blue,
+                    TUNNEL_COLOR,
                 );
                 // Add pyramids to all faces in the bicupola which still exist
                 for face in faces_to_add_pyramids {
@@ -466,26 +482,35 @@ impl ModelTree {
                         poly.extend_pyramid(face);
                     }
                 }
-                poly
-            }),
-            Model::new("Christopher", prism_extended_cuboctahedron()),
+
+                Model::with_colors("Apanar Deltahedron", poly, color_map)
+            },
+            {
+                const TRI_COLOR_NAME: &str = "Triangle";
+                const SQUARE_COLOR_NAME: &str = "Square";
+                let mut color_map = ColorMap::new();
+                color_map.insert(TRI_COLOR_NAME.to_owned(), Rgba::from_rgb(0.2, 0.35, 1.0));
+                color_map.insert(SQUARE_COLOR_NAME.to_owned(), Rgba::from_rgb(1.0, 0.2, 0.35));
+
+                let poly = prism_extended_cuboctahedron(TRI_COLOR_NAME, SQUARE_COLOR_NAME);
+                Model::with_colors("Christopher", poly, color_map)
+            },
         ];
         Self::new_group("Toroids", toroids)
     }
 }
 
-fn prism_extended_cuboctahedron() -> Polyhedron {
+fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedron {
     // Make the pyramids out of which the cuboctahedron's faces will be constructed
-    let make_pyramid = |n: usize| -> (Polyhedron, Vec<FaceIdx>) {
+    let make_pyramid = |n: usize, color_name: &str| -> (Polyhedron, Vec<FaceIdx>) {
         let Pyramid {
             mut poly,
             base_face,
         } = Polyhedron::pyramid(n);
         // Colour the base face
-        let blue = poly.add_color(egui::Rgba::from_rgb(0.2, 0.35, 1.0));
         let verts = &poly.get_face(base_face).verts().to_vec();
         for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
-            poly.set_half_edge_color(v2, v1, blue);
+            poly.set_half_edge_color(v2, v1, color_name);
         }
         // Get the side faces
         let side_faces = poly
@@ -495,8 +520,8 @@ fn prism_extended_cuboctahedron() -> Polyhedron {
             .collect_vec();
         (poly, side_faces)
     };
-    let (tri_pyramid, tri_pyramid_side_faces) = make_pyramid(3);
-    let (quad_pyramid, quad_pyramid_side_faces) = make_pyramid(4);
+    let (tri_pyramid, tri_pyramid_side_faces) = make_pyramid(3, tri_color);
+    let (quad_pyramid, quad_pyramid_side_faces) = make_pyramid(4, square_color);
 
     // Recursively build the polyhedron
     let mut poly = quad_pyramid.clone();

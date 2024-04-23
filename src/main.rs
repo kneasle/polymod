@@ -7,7 +7,6 @@ use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use polyhedron::{EdgeAngleType, EdgeId, FaceIdx, Polyhedron, VertIdx};
 use three_d::{egui::RichText, *};
-use utils::OrderedRgba;
 
 use crate::{
     model::ModelId,
@@ -131,11 +130,8 @@ fn main() {
                                 );
                                 ui.add_space(SMALL_SPACE);
                                 ui.heading("Geometry Breakdown");
-                                edges_to_highlight = model_geom_gui(
-                                    current_model.polyhedron(),
-                                    &mut show_external_angles,
-                                    ui,
-                                );
+                                edges_to_highlight =
+                                    model_geom_gui(current_model, &mut show_external_angles, ui);
                             });
                         });
                 right_panel_width = response.response.rect.width();
@@ -226,10 +222,12 @@ fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
 }
 
 fn model_geom_gui(
-    poly: &Polyhedron,
+    model: &Model,
     show_external_angles: &mut bool,
     ui: &mut egui::Ui,
 ) -> HashSet<EdgeId> {
+    let poly = model.polyhedron();
+
     // Faces
     ui.strong(format!("{} faces", poly.faces().count()));
     ui.indent("faces", |ui| {
@@ -258,8 +256,8 @@ fn model_geom_gui(
                 // Get face data
                 let left_n = poly.face_order(left_face);
                 let right_n = poly.face_order(edge.right_face);
-                let col_left = poly.edge_side_color(edge.bottom_vert, edge.top_vert);
-                let col_right = poly.edge_side_color(edge.top_vert, edge.bottom_vert);
+                let col_left = poly.get_edge_side_color(edge.bottom_vert, edge.top_vert);
+                let col_right = poly.get_edge_side_color(edge.top_vert, edge.bottom_vert);
                 // Categorise this new edge
                 let (face_type, face_cmp) = EdgeFaceType::new(left_n, right_n, col_left, col_right);
                 let sub_type = EdgeSubType::new(edge, face_cmp, poly, &edges);
@@ -288,9 +286,15 @@ fn model_geom_gui(
                 // Count
                 ui.label(format!("{}x ", num_edges));
                 // Ngon pair (e.g. "triangle-decagon")
-                ui.colored_label(face_type.left_color.0, ngon_name(face_type.left_order));
+                ui.colored_label(
+                    model.get_color(face_type.left_color),
+                    ngon_name(face_type.left_order),
+                );
                 ui.label("-");
-                ui.colored_label(face_type.right_color.0, ngon_name(face_type.right_order));
+                ui.colored_label(
+                    model.get_color(face_type.right_color),
+                    ngon_name(face_type.right_order),
+                );
                 // Angle
                 if angle_breakdown.len() == 1 {
                     let sub_type = *angle_breakdown.keys().next().unwrap();
@@ -331,24 +335,24 @@ fn model_geom_gui(
 
 /// Top-level edge classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct EdgeFaceType {
+struct EdgeFaceType<'poly> {
     left_order: usize,
     right_order: usize,
-    left_color: OrderedRgba,
-    right_color: OrderedRgba,
+    left_color: Option<&'poly str>,
+    right_color: Option<&'poly str>,
 }
 
-impl EdgeFaceType {
+impl<'poly> EdgeFaceType<'poly> {
     /// Create a new `EdgeFaceType`, ensuring that left < right
     fn new(
         left_order: usize,
         right_order: usize,
-        left_color: egui::Rgba,
-        right_color: egui::Rgba,
+        left_color: Option<&'poly str>,
+        right_color: Option<&'poly str>,
     ) -> (Self, Ordering) {
         // Normalize faces so that left < right
-        let mut left = (left_order, OrderedRgba(left_color));
-        let mut right = (right_order, OrderedRgba(right_color));
+        let mut left = (left_order, left_color);
+        let mut right = (right_order, right_color);
         let ordering = left.cmp(&right);
         if ordering.is_gt() {
             std::mem::swap(&mut left, &mut right);

@@ -7,11 +7,11 @@ use std::{
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use three_d::{
-    egui, vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3,
-    Vec4, Zero,
+    vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Srgba, Vec3, Vec4,
+    Zero,
 };
 
-use crate::utils::{lerp3, lerp_color, Side};
+use crate::utils::{lerp3, Side};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -20,11 +20,15 @@ pub struct Polyhedron {
     /// Each face of the model, listing vertices in clockwise order
     faces: FaceVec<Option<Face>>,
 
-    // Indexed colors for each side of each edge.  If `edge_colors[(a, b)] = idx` then the side
-    // of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
-    // given the color at `color_index[idx]`.
-    half_edge_colors: HashMap<(VertIdx, VertIdx), ColorIdx>,
-    color_index: ColVec<egui::Rgba>,
+    /// Indexed colors for each side of each edge.  If `edge_colors[(a, b)] = idx` then the side
+    /// of the edge who's top-right vertex is `a` and who's bottom-right vertex is `b` will be
+    /// given the color at `color_index[idx]`.
+    ///
+    /// Note that the exact colours are stored outside of the `Polyhedron` but are referred to here
+    /// by [`String`] identifiers.  This allows colours to be merged correctly while merging
+    /// polyhedra, but also allows the colours themselves to be modified without mutating the
+    /// underlying `Polyhedron` (which shouldn't care how it will be rendered).
+    half_edge_colors: HashMap<(VertIdx, VertIdx), String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -867,18 +871,12 @@ impl Polyhedron {
         // polyhedra)
         self.cancel_faces();
 
-        // Merge colours
-        let mut new_color_idxs = ColVec::new();
-        for &color in other.color_index.iter() {
-            let new_idx = self.color_index.push(color);
-            new_color_idxs.push(new_idx);
-        }
         // Merge colour assignments
-        for ((v1, v2), source_col_idx) in &other.half_edge_colors {
+        for ((v1, v2), col_name) in &other.half_edge_colors {
             let new_v1 = new_vert_indices[*v1];
             let new_v2 = new_vert_indices[*v2];
-            let new_col = new_color_idxs[*source_col_idx];
-            self.half_edge_colors.insert((new_v1, new_v2), new_col);
+            self.half_edge_colors
+                .insert((new_v1, new_v2), col_name.to_owned());
         }
 
         // Return the new indices of the faces in `other`
@@ -933,7 +931,7 @@ impl Polyhedron {
     pub fn color_edges_added_by<T>(
         &mut self,
         operation: impl FnOnce(&mut Self) -> T,
-        color: ColorIdx,
+        color: &str,
     ) -> T {
         let (edges_added, value) = self.get_edges_added_by(operation);
         for e in edges_added {
@@ -1023,7 +1021,6 @@ impl Polyhedron {
                 .collect(),
 
             half_edge_colors: HashMap::default(),
-            color_index: ColVec::default(),
         };
         m.make_centred();
         m
@@ -1031,46 +1028,32 @@ impl Polyhedron {
 
     /* COLORS */
 
-    pub const DEFAULT_COLOR: egui::Rgba = egui::Rgba::from_rgb(0.4, 0.4, 0.4);
-
-    pub fn add_color(&mut self, color: egui::Rgba) -> ColorIdx {
-        self.color_index.push(color)
-    }
-
-    pub fn color_face(&mut self, face: FaceIdx, color: ColorIdx) {
+    pub fn color_face(&mut self, face: FaceIdx, color_name: &str) {
         let verts = &self.get_face(face).verts.clone();
         for (v1, v2) in verts.iter().circular_tuple_windows() {
-            self.set_half_edge_color(*v2, *v1, color);
+            self.set_half_edge_color(*v2, *v1, color_name);
         }
     }
 
     /// Give both sides of every edge of this model the given `color`
-    pub fn colour_all_edges(&mut self, color: ColorIdx) {
+    pub fn colour_all_edges(&mut self, color_name: &str) {
         for edge in self.edges() {
-            self.set_full_edge_color(edge.id(), color);
+            self.set_full_edge_color(edge.id(), color_name);
         }
     }
 
-    pub fn set_full_edge_color(&mut self, edge: EdgeId, color: ColorIdx) {
-        self.set_half_edge_color(edge.v1(), edge.v2(), color);
-        self.set_half_edge_color(edge.v2(), edge.v1(), color);
+    pub fn set_full_edge_color(&mut self, edge: EdgeId, color_name: &str) {
+        self.set_half_edge_color(edge.v1(), edge.v2(), color_name);
+        self.set_half_edge_color(edge.v2(), edge.v1(), color_name);
     }
 
-    pub fn set_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color: ColorIdx) {
-        self.half_edge_colors.insert((v1, v2), color);
+    pub fn set_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx, color_name: &str) {
+        self.half_edge_colors
+            .insert((v1, v2), color_name.to_owned());
     }
 
-    pub fn edge_side_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
-        match self.half_edge_colors.get(&(a, b)) {
-            Some(idx) => self.color_index[*idx],
-            None => Self::DEFAULT_COLOR,
-        }
-    }
-
-    pub fn mixed_edge_color(&self, a: VertIdx, b: VertIdx) -> egui::Rgba {
-        let left_color = self.edge_side_color(a, b);
-        let right_color = self.edge_side_color(b, a);
-        lerp_color(left_color, right_color, 0.5)
+    pub fn get_edge_side_color(&self, a: VertIdx, b: VertIdx) -> Option<&str> {
+        self.half_edge_colors.get(&(a, b)).map(String::as_str)
     }
 
     /// Create a vertex at the given coords `p`, returning its index.  If there's already a vertex
@@ -1434,7 +1417,5 @@ impl EdgeId {
 
 index_vec::define_index_type! { pub struct VertIdx = usize; }
 index_vec::define_index_type! { pub struct FaceIdx = usize; }
-index_vec::define_index_type! { pub struct ColorIdx = usize; }
 pub type VertVec<T> = index_vec::IndexVec<VertIdx, T>;
 pub type FaceVec<T> = index_vec::IndexVec<FaceIdx, T>;
-pub type ColVec<T> = index_vec::IndexVec<ColorIdx, T>;
