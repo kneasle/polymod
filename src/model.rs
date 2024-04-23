@@ -83,6 +83,21 @@ impl Model {
         self.view_geometry_settings.gui(ui);
     }
 
+    pub fn draw_colors_gui(&mut self, ui: &mut egui::Ui) {
+        let mut draw_color = |col: &mut Color32, label: &str| {
+            ui.horizontal(|ui| {
+                ui.color_edit_button_srgba(col);
+                ui.label(label);
+            })
+        };
+
+        // Draw all colours, including the default one
+        draw_color(&mut self.default_color, "(Default)");
+        for (name, color) in &mut self.colors {
+            draw_color(color, name);
+        }
+    }
+
     /* HELPERS */
 
     pub fn get_edge_side_color(&self, v1: VertIdx, v2: VertIdx) -> Color32 {

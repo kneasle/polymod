@@ -104,6 +104,10 @@ fn main() {
                                         ui.add_space(SMALL_SPACE);
                                         ui.heading("Geometry View");
                                         model.draw_view_geom_gui(ui);
+
+                                        ui.add_space(SMALL_SPACE);
+                                        ui.heading("Colors");
+                                        model.draw_colors_gui(ui);
                                     }
                                     None => {
                                         ui.label("Built-in models can't be edited.");
