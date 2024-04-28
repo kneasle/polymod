@@ -944,14 +944,30 @@ impl Polyhedron {
 
     pub fn color_edges_added_by<T>(
         &mut self,
-        operation: impl FnOnce(&mut Self) -> T,
         color: &str,
+        operation: impl FnOnce(&mut Self) -> T,
     ) -> T {
         let (edges_added, value) = self.get_edges_added_by(operation);
         for e in edges_added {
             self.set_full_edge_color(e, color);
         }
         value
+    }
+
+    pub fn color_faces_added_by<T>(
+        &mut self,
+        color: &str,
+        operation: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let first_added_face = self.faces.next_idx();
+        let v = operation(self);
+        for new_face in first_added_face.index()..self.faces.len() {
+            let new_face = FaceIdx::new(new_face);
+            if self.is_face(new_face) {
+                self.color_face(new_face, color);
+            }
+        }
+        v
     }
 
     /// Perform a given `operation`, and set the colors of any new edges to the given `color`
