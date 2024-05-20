@@ -886,17 +886,27 @@ fn toroids() -> Vec<Model> {
             poly.excavate_cuboctahedron(top_face);
             poly
         }),
-        Model::new("K_3 / 3Q_3 (S_3)".to_owned(), {
+        {
+            const TUNNEL_COL: &str = "Tunnels";
+            const CENTRE_COL: &str = "Centre";
+            let mut color_map = ColorMap::new();
+            color_map.insert(TUNNEL_COL.to_owned(), BLUE);
+            color_map.insert(CENTRE_COL.to_owned(), RED);
+
             let mut poly = Polyhedron::truncated_octahedron();
             // Excavate cupolas (TODO: Do this by symmetry)
             let mut inner_face = FaceIdx::new(0);
-            for face_idx in [0, 2, 4, 6] {
-                inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
-            }
+            poly.color_faces_added_by(TUNNEL_COL, |poly| {
+                for face_idx in [0, 2, 4, 6] {
+                    inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
+                }
+            });
             // Excavate central octahedron
-            poly.excavate_antiprism(inner_face);
-            poly
-        }),
+            poly.color_faces_added_by(CENTRE_COL, |poly| {
+                poly.excavate_antiprism(inner_face);
+            });
+            Model::with_colors("K_3 / 3Q_3 (S_3)".to_owned(), poly, color_map)
+        },
         Model::new("K_4 (tunnel octagons)".to_owned(), {
             let mut poly = Polyhedron::great_rhombicuboctahedron();
             let mut inner_face = FaceIdx::new(0);
