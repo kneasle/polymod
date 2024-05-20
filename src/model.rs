@@ -928,17 +928,33 @@ fn toroids() -> Vec<Model> {
             poly.excavate(inner_face, &inner, face, 0);
             poly
         }),
-        Model::new("K_5 (cupola/antiprism)".to_owned(), {
+        {
+            const OUTER_COL: &str = "Outer";
+            const INNER_COL: &str = "Inner";
+            let mut color_map = ColorMap::new();
+            color_map.insert(OUTER_COL.to_owned(), BLUE);
+            color_map.insert(INNER_COL.to_owned(), RED);
+
             let mut poly = Polyhedron::great_rhombicosidodecahedron();
+            for face_idx in poly.face_indices() {
+                if poly.face_order(face_idx) != 10 {
+                    poly.color_face(face_idx, OUTER_COL);
+                }
+            }
             let mut inner_face = FaceIdx::new(0);
             for decagon in poly.ngons(10) {
                 let next = poly.excavate_cupola(decagon, true);
                 inner_face = poly.excavate_antiprism(next);
             }
-            let inner = Polyhedron::rhombicosidodecahedron();
+            let mut inner = Polyhedron::rhombicosidodecahedron();
+            for face_idx in inner.face_indices() {
+                if inner.face_order(face_idx) != 5 {
+                    inner.color_face(face_idx, INNER_COL);
+                }
+            }
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-            poly
-        }),
+            Model::with_colors("K_5 (cupola/antiprism)".to_owned(), poly, color_map)
+        },
         Model::new("K_5 (rotunda)".to_owned(), {
             let mut poly = Polyhedron::great_rhombicosidodecahedron();
             let mut inner_face = FaceIdx::new(0);

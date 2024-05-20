@@ -886,8 +886,13 @@ impl Polyhedron {
 
         // Merge color assignments
         for ((v1, v2), col_name) in &other.half_edge_colors {
-            let new_v1 = new_vert_indices[*v1];
-            let new_v2 = new_vert_indices[*v2];
+            let mut new_v1 = new_vert_indices[*v1];
+            let mut new_v2 = new_vert_indices[*v2];
+            if dir == MergeDir::Excavate {
+                // Swap edges round for excavations because the face ends up 'inside-out' and its
+                // vertex order is therefore reversed
+                std::mem::swap(&mut new_v1, &mut new_v2);
+            }
             self.half_edge_colors
                 .insert((new_v1, new_v2), col_name.to_owned());
         }
@@ -1194,6 +1199,14 @@ impl Polyhedron {
 
     pub fn faces(&self) -> impl DoubleEndedIterator<Item = &Face> + '_ {
         self.faces.iter().flatten()
+    }
+
+    pub fn face_indices(&self) -> Vec<FaceIdx> {
+        self.faces
+            .iter_enumerated()
+            .filter(|(_idx, f)| f.is_some())
+            .map(|(idx, _f)| idx)
+            .collect_vec()
     }
 
     pub fn faces_enumerated(&self) -> impl DoubleEndedIterator<Item = (FaceIdx, &Face)> + '_ {
