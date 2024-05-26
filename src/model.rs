@@ -177,30 +177,20 @@ pub enum FaceGeomStyle {
     OwLikeAngled,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OwUnit {
-    Deg60,
-    SturdyEdgeModule90,
-    CustomDeg90,
-    CustomDeg108,
-    Deg120,
-    Deg135,
-}
-
 impl Default for ViewGeomSettings {
     fn default() -> Self {
         ViewGeomSettings {
-            style: FaceGeomStyle::Solid,
+            style: FaceGeomStyle::OwLikeAngled,
             side_ratio: 0.25,
 
             paper_ratio_w: 3,
             paper_ratio_h: 2,
-            unit: OwUnit::CustomDeg90,
+            unit: OwUnit::Custom3468,
             direction: Side::In,
             add_crinkle: false,
 
-            wireframe_edges: true,
-            wireframe_verts: true,
+            wireframe_edges: false,
+            wireframe_verts: false,
         }
     }
 }
@@ -212,21 +202,21 @@ impl ViewGeomSettings {
             FaceGeomStyle::Solid => FaceRenderStyle::Solid,
             FaceGeomStyle::OwLikeFlat => FaceRenderStyle::OwLike {
                 side_ratio: self.side_ratio,
-                fixed_angle: None,
+                non_flat: None,
             },
             FaceGeomStyle::OwLikeAngled => {
                 // Model the geometry of the unit
                 let OwUnitGeometry {
                     paper_aspect,
                     spine_length_factor: spine_length,
-                    angle,
+                    supported_angles,
                 } = self.ow_unit_geometry().unwrap();
                 let unit_width = paper_aspect / 4.0;
                 // Construct unit info
                 FaceRenderStyle::OwLike {
                     side_ratio: unit_width / spine_length,
-                    fixed_angle: Some(FixedAngle {
-                        angle,
+                    non_flat: Some(NonFlat {
+                        supported_angles,
                         push_direction: self.direction,
                         add_crinkle: self.add_crinkle,
                     }),
@@ -267,6 +257,7 @@ impl ViewGeomSettings {
         ui.indent("ow-like-angled", |ui| {
             egui::ComboBox::new("ow-unit", "")
                 .selected_text(self.unit.name())
+                .width(150.0)
                 .show_ui(ui, |ui| {
                     for unit in OwUnit::ALL {
                         ui.selectable_value(&mut self.unit, unit, unit.name());
@@ -293,18 +284,30 @@ impl ViewGeomSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwUnit {
+    Deg60,
+    SturdyEdgeModule90,
+    CustomDeg90,
+    Custom3468,
+    CustomDeg108,
+    Deg120,
+    Deg135,
+}
+
+#[derive(Debug, Clone)]
 pub struct OwUnitGeometry {
     pub paper_aspect: f32,
     pub spine_length_factor: f32, // As a factor of paper width
-    pub angle: Degrees,
+    pub supported_angles: Vec<Degrees>,
 }
 
 impl OwUnit {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 7] = [
         OwUnit::Deg60,
         OwUnit::SturdyEdgeModule90,
         OwUnit::CustomDeg90,
+        OwUnit::Custom3468,
         OwUnit::CustomDeg108,
         OwUnit::Deg120,
         OwUnit::Deg135,
@@ -321,20 +324,21 @@ impl OwUnit {
         const DEG_135_REDUCTION: f32 = 0.82842714; // 2.0 * tan(22.5 deg)
 
         // Reduction factor is a multiple of 1/4 of the paper's height
-        let (reduction_factor, full_angle) = match self {
-            OwUnit::Deg60 => (0.0, Deg(60.0)),
-            OwUnit::SturdyEdgeModule90 => (0.5, Deg(90.0)),
-            OwUnit::CustomDeg90 => (1.0, Deg(90.0)),
-            OwUnit::CustomDeg108 => (DEG_108_REDUCTION, Deg(108.0)),
-            OwUnit::Deg120 => (DEG_120_REDUCTION, Deg(120.0)),
-            OwUnit::Deg135 => (DEG_135_REDUCTION, Deg(135.0)),
+        let (reduction_factor, supported_angles) = match self {
+            OwUnit::Deg60 => (0.0, vec![Deg(60.0)]),
+            OwUnit::SturdyEdgeModule90 => (0.5, vec![Deg(90.0)]),
+            OwUnit::CustomDeg90 => (1.0, vec![Deg(90.0)]),
+            OwUnit::Custom3468 => (1.0, vec![Deg(60.0), Deg(90.0), Deg(120.0), Deg(135.0)]),
+            OwUnit::CustomDeg108 => (DEG_108_REDUCTION, vec![Deg(108.0)]),
+            OwUnit::Deg120 => (DEG_120_REDUCTION, vec![Deg(120.0)]),
+            OwUnit::Deg135 => (DEG_135_REDUCTION, vec![Deg(135.0)]),
         };
         let length_reduction = paper_aspect * 0.25 * reduction_factor;
         let spine_length = 1.0 - length_reduction * 2.0;
         OwUnitGeometry {
             paper_aspect,
             spine_length_factor: spine_length,
-            angle: full_angle / 2.0,
+            supported_angles,
         }
     }
 
@@ -343,6 +347,7 @@ impl OwUnit {
             OwUnit::Deg60 => "Ow's 60° unit",
             OwUnit::SturdyEdgeModule90 => "StEM (90°)",
             OwUnit::CustomDeg90 => "Custom 90° unit",
+            OwUnit::Custom3468 => "60°, 90°, 120°, 135° unit",
             OwUnit::CustomDeg108 => "Custom 108° unit",
             OwUnit::Deg120 => "Ow's 120° unit",
             OwUnit::Deg135 => "Ow's 135° unit",
@@ -361,7 +366,7 @@ const INSIDE_TINT: f32 = 0.5;
 const EDGE_RADIUS: f32 = 0.03;
 const VERTEX_RADIUS: f32 = 0.05;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FaceRenderStyle {
     /// Render model with solid faces
     Solid,
@@ -384,13 +389,13 @@ pub enum FaceRenderStyle {
         /// The ratio of sides of the module.  If the edge length of the model is 1, then each
         /// side of the module is `side_ratio`
         side_ratio: f32,
-        fixed_angle: Option<FixedAngle>,
+        non_flat: Option<NonFlat>,
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FixedAngle {
-    pub angle: Degrees,
+#[derive(Debug, Clone, PartialEq)]
+pub struct NonFlat {
+    pub supported_angles: Vec<Degrees>,
     pub push_direction: Side,
     pub add_crinkle: bool,
 }
@@ -398,10 +403,10 @@ pub struct FixedAngle {
 impl Model {
     pub fn face_mesh(&self) -> Option<CpuMesh> {
         let style = self.view_geometry_settings.face_render_style()?;
-        Some(self.face_mesh_with_style(style))
+        Some(self.face_mesh_with_style(&style))
     }
 
-    fn face_mesh_with_style(&self, style: FaceRenderStyle) -> CpuMesh {
+    fn face_mesh_with_style(&self, style: &FaceRenderStyle) -> CpuMesh {
         // Create outward-facing faces
         let faces = self.faces_to_render(style);
         let (verts, colors, tri_indices) = Self::triangulate_mesh(faces);
@@ -438,7 +443,7 @@ impl Model {
         mesh
     }
 
-    fn faces_to_render(&self, style: FaceRenderStyle) -> Vec<(Color32, Vec<Vec3>)> {
+    fn faces_to_render(&self, style: &FaceRenderStyle) -> Vec<(Color32, Vec<Vec3>)> {
         let mut faces_to_render = Vec::new();
         for face in self.polyhedron.faces() {
             // Decide how to render them, according to the style
@@ -459,9 +464,9 @@ impl Model {
                 // For ow-like faces, render up to two faces per edge
                 FaceRenderStyle::OwLike {
                     side_ratio,
-                    fixed_angle,
+                    non_flat,
                 } => {
-                    self.owlike_faces(face, side_ratio, fixed_angle, &mut faces_to_render);
+                    self.owlike_faces(face, *side_ratio, non_flat.as_ref(), &mut faces_to_render);
                 }
             }
         }
@@ -472,7 +477,7 @@ impl Model {
         &self,
         face: &Face,
         side_ratio: f32,
-        fixed_angle: Option<FixedAngle>,
+        fixed_angle: Option<&NonFlat>,
         faces_to_render: &mut Vec<(Color32, Vec<Vec3>)>,
     ) {
         // Geometry calculations
@@ -490,19 +495,19 @@ impl Model {
             let edge_color = self.get_edge_side_color(*i1, *i0);
             let mut add_face = |verts: Vec<Vec3>| faces_to_render.push((edge_color, verts));
 
-            match fixed_angle {
+            match &fixed_angle {
                 // If the unit has no fixed angle, then always make the units parallel
                 // to the faces
                 None => add_face(vec![v0, v1, v1 + in1 * side_ratio, v0 + in0 * side_ratio]),
                 Some(angle) => {
-                    let FixedAngle {
-                        angle: unit_angle,
+                    let NonFlat {
+                        supported_angles,
                         push_direction,
                         add_crinkle,
                     } = angle;
                     // Calculate the unit's inset angle, and therefore break the unit length down
                     // into x/y components
-                    let inset_angle = unit_inset_angle(face.order(), unit_angle.into());
+                    let inset_angle = unit_inset_angle(face.order(), &supported_angles);
                     let l_in = side_ratio * inset_angle.cos();
                     let l_up = side_ratio * inset_angle.sin();
                     // Pick a normal to use based on the push direction
@@ -512,7 +517,7 @@ impl Model {
                     };
                     let up = unit_up * l_up;
                     // Add faces
-                    if add_crinkle {
+                    if *add_crinkle {
                         let v0_peak = v0 + l_in * in0 * 0.5 + up * 0.5;
                         let v1_peak = v1 + l_in * in1 * 0.5 + up * 0.5;
                         add_face(vec![v0, v1, v1_peak, v0_peak]);
@@ -646,8 +651,15 @@ impl Model {
     }
 }
 
-fn unit_inset_angle(n: usize, unit_angle: Radians) -> Radians {
+fn unit_inset_angle(n: usize, supported_angles: &[Degrees]) -> Radians {
+    // Determine which of the supported angles to take
     let interior_ngon_angle = Rad(PI - (PI * 2.0 / n as f32));
+    let chosen_angle = *supported_angles
+        .iter()
+        .find_or_last(|&&a| Radians::from(a) >= interior_ngon_angle - Rad(0.001))
+        .unwrap();
+    let unit_angle = Radians::from(chosen_angle) / 2.0; // The whole interior angle is made up by two units
+
     let mut angle = angle_in_spherical_triangle(unit_angle, interior_ngon_angle, unit_angle);
     // Correct NaN angles (if the corner is too wide or the unit is level with the face and
     // rounding errors cause us to get `NaN`)
@@ -910,7 +922,9 @@ fn toroids() -> Vec<Model> {
                 inner_face = poly.excavate_cupola(octagon, false);
             }
             let inner = Polyhedron::rhombicuboctahedron();
-            poly.excavate(inner_face, &inner, inner.get_ngon(4), 0);
+            poly.color_faces_added_by("Inner", |poly| {
+                poly.excavate(inner_face, &inner, inner.get_ngon(4), 0);
+            });
             poly
         }),
         Model::new("K_4 (tunnel hexagons)".to_owned(), {
@@ -920,7 +934,9 @@ fn toroids() -> Vec<Model> {
                 inner_face = poly.excavate_cupola(hexagon, true);
             }
             let inner = Polyhedron::rhombicuboctahedron();
-            poly.excavate(inner_face, &inner, inner.get_ngon(3), 0);
+            poly.color_faces_added_by("Inner", |poly| {
+                poly.excavate(inner_face, &inner, inner.get_ngon(3), 0);
+            });
             poly
         }),
         Model::new("K_4 (tunnel cubes)".to_owned(), {
@@ -931,7 +947,9 @@ fn toroids() -> Vec<Model> {
             }
             let inner = Polyhedron::rhombicuboctahedron();
             let face = *inner.ngons(4).last().unwrap();
-            poly.excavate(inner_face, &inner, face, 0);
+            poly.color_faces_added_by("Inner", |poly| {
+                poly.excavate(inner_face, &inner, face, 0);
+            });
             poly
         }),
         {
