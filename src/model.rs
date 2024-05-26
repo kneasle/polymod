@@ -38,14 +38,16 @@ impl Model {
     }
 
     pub fn with_colors(full_name: String, poly: Polyhedron, colors: ColorMap) -> Self {
-        Self {
+        let mut model = Self {
             full_name,
             polyhedron: poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
             default_color: Color32::GRAY,
             colors,
-        }
+        };
+        model.fill_color_map();
+        model
     }
 
     pub fn full_name(&self) -> &str {
@@ -110,6 +112,22 @@ impl Model {
     }
 
     /* HELPERS */
+
+    /// Make sure that the map of colours has an entry for every color referenced in the
+    /// [`Polyhedron`].
+    pub fn fill_color_map(&mut self) {
+        const BLUE: Color32 = Color32::from_rgb(51, 90, 255);
+        const RED: Color32 = Color32::from_rgb(255, 51, 90);
+        const GREEN: Color32 = Color32::from_rgb(90, 255, 51);
+
+        let mut color_iter = [BLUE, RED, GREEN].into_iter().cycle();
+        for (_edge, color) in self.polyhedron.half_edge_colors() {
+            if !self.colors.contains_key(color) {
+                self.colors
+                    .insert(color.to_owned(), color_iter.next().unwrap());
+            }
+        }
+    }
 
     pub fn get_edge_side_color(&self, v1: VertIdx, v2: VertIdx) -> Color32 {
         let color_name = self.polyhedron.get_edge_side_color(v1, v2);
@@ -738,9 +756,6 @@ pub fn builtin_models() -> Vec<Model> {
 }
 
 fn toroids() -> Vec<Model> {
-    const BLUE: Color32 = Color32::from_rgb(51, 90, 255);
-    const RED: Color32 = Color32::from_rgb(255, 51, 90);
-
     let qpq_slash_p = |gyro: bool| -> Polyhedron {
         let PrismLike {
             mut poly,
@@ -825,40 +840,27 @@ fn toroids() -> Vec<Model> {
             poly
         }),
         {
-            const TUNNEL_COLOR_NAME: &str = "Tunnel";
-            let mut color_map = ColorMap::new();
-            color_map.insert(TUNNEL_COLOR_NAME.to_owned(), BLUE);
-
             let mut poly = Polyhedron::truncated_cube();
             let face = poly.get_face_with_normal(Vec3::unit_x());
-            poly.color_faces_added_by(TUNNEL_COLOR_NAME, |poly| {
+            poly.color_faces_added_by("Tunnel", |poly| {
                 let next = poly.excavate_cupola(face, true);
                 let next = poly.excavate_prism(next);
                 poly.excavate_cupola(next, false);
             });
-
-            Model::with_colors("Bob".to_owned(), poly, color_map)
+            Model::new("Bob".to_owned(), poly)
         },
         {
-            const TUNNEL_COLOR_NAME: &str = "Tunnel";
-            let mut color_map = ColorMap::new();
-            color_map.insert(TUNNEL_COLOR_NAME.to_owned(), BLUE);
-
             let mut poly = Polyhedron::truncated_cube();
             let face = poly.get_face_with_normal(Vec3::unit_x());
-            poly.color_faces_added_by(TUNNEL_COLOR_NAME, |poly| {
+            poly.color_faces_added_by("Tunnel", |poly| {
                 let next = poly.excavate_cupola(face, false);
                 let next = poly.excavate_prism(next);
                 poly.excavate_cupola(next, false);
             });
 
-            Model::with_colors("Gyrated Bob".to_owned(), poly, color_map)
+            Model::new("Gyrated Bob".to_owned(), poly)
         },
         {
-            const TUNNEL_COLOR_NAME: &str = "Tunnel";
-            let mut color_map = ColorMap::new();
-            color_map.insert(TUNNEL_COLOR_NAME.to_owned(), BLUE);
-
             let mut poly = Polyhedron::truncated_cube();
             // Extend +x and -x faces with cupolae
             let face = poly.get_face_with_normal(Vec3::unit_x());
@@ -866,13 +868,13 @@ fn toroids() -> Vec<Model> {
             poly.extend_cupola(back_face, true);
             let next = poly.extend_cupola(face, true);
             // Tunnel with B_4 (P_4) B_4
-            poly.color_faces_added_by(TUNNEL_COLOR_NAME, |poly| {
+            poly.color_faces_added_by("Tunnel", |poly| {
                 let next = poly.excavate_cuboctahedron(next);
                 let next = poly.excavate_prism(next);
                 poly.excavate_cuboctahedron(next);
             });
 
-            Model::with_colors("Dumbell".to_owned(), poly, color_map)
+            Model::new("Dumbell".to_owned(), poly)
         },
         Model::new("Q_3 P_6 Q_3 / P_6".to_owned(), qpq_slash_p(false)),
         Model::new("Q_3 P_6 gQ_3 / P_6".to_owned(), qpq_slash_p(true)),
@@ -887,25 +889,19 @@ fn toroids() -> Vec<Model> {
             poly
         }),
         {
-            const TUNNEL_COL: &str = "Tunnels";
-            const CENTRE_COL: &str = "Centre";
-            let mut color_map = ColorMap::new();
-            color_map.insert(TUNNEL_COL.to_owned(), BLUE);
-            color_map.insert(CENTRE_COL.to_owned(), RED);
-
             let mut poly = Polyhedron::truncated_octahedron();
             // Excavate cupolas (TODO: Do this by symmetry)
             let mut inner_face = FaceIdx::new(0);
-            poly.color_faces_added_by(TUNNEL_COL, |poly| {
+            poly.color_faces_added_by("Tunnels", |poly| {
                 for face_idx in [0, 2, 4, 6] {
                     inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
                 }
             });
             // Excavate central octahedron
-            poly.color_faces_added_by(CENTRE_COL, |poly| {
+            poly.color_faces_added_by("Centre", |poly| {
                 poly.excavate_antiprism(inner_face);
             });
-            Model::with_colors("K_3 / 3Q_3 (S_3)".to_owned(), poly, color_map)
+            Model::new("K_3 / 3Q_3 (S_3)".to_owned(), poly)
         },
         Model::new("K_4 (tunnel octagons)".to_owned(), {
             let mut poly = Polyhedron::great_rhombicuboctahedron();
@@ -939,16 +935,10 @@ fn toroids() -> Vec<Model> {
             poly
         }),
         {
-            const OUTER_COL: &str = "Outer";
-            const INNER_COL: &str = "Inner";
-            let mut color_map = ColorMap::new();
-            color_map.insert(OUTER_COL.to_owned(), BLUE);
-            color_map.insert(INNER_COL.to_owned(), RED);
-
             let mut poly = Polyhedron::great_rhombicosidodecahedron();
             for face_idx in poly.face_indices() {
                 if poly.face_order(face_idx) != 10 {
-                    poly.color_face(face_idx, OUTER_COL);
+                    poly.color_face(face_idx, "Outer");
                 }
             }
             let mut inner_face = FaceIdx::new(0);
@@ -959,11 +949,11 @@ fn toroids() -> Vec<Model> {
             let mut inner = Polyhedron::rhombicosidodecahedron();
             for face_idx in inner.face_indices() {
                 if inner.face_order(face_idx) != 5 {
-                    inner.color_face(face_idx, INNER_COL);
+                    inner.color_face(face_idx, "Inner");
                 }
             }
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-            Model::with_colors("K_5 (cupola/antiprism)".to_owned(), poly, color_map)
+            Model::new("K_5 (cupola/antiprism)".to_owned(), poly)
         },
         Model::new("K_5 (rotunda)".to_owned(), {
             let mut poly = Polyhedron::great_rhombicosidodecahedron();
@@ -990,15 +980,9 @@ fn toroids() -> Vec<Model> {
             poly
         }),
         {
-            const OUTER_COL: &str = "Outer";
-            const INNER_COL: &str = "Inner";
-            let mut color_map = ColorMap::new();
-            color_map.insert(OUTER_COL.to_owned(), BLUE);
-            color_map.insert(INNER_COL.to_owned(), RED);
-
             // Start with a colored truncated dodecahedron
             let mut poly = Polyhedron::truncated_dodecahedron();
-            poly.color_all_edges(OUTER_COL);
+            poly.color_all_edges("Outer");
             // Excavate using cupolae and antiprisms to form the tunnels
             let mut inner_face = FaceIdx::new(0);
             for decagon in poly.ngons(10) {
@@ -1007,20 +991,16 @@ fn toroids() -> Vec<Model> {
             }
             // Excavate the central cavity, and color these edges
             let mut inner = Polyhedron::dodecahedron();
-            inner.color_all_edges(INNER_COL);
+            inner.color_all_edges("Inner");
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
 
-            Model::with_colors("Stephanie (Coloring A)".to_owned(), poly, color_map)
+            Model::new("Stephanie (Coloring A)".to_owned(), poly)
         },
         {
-            const OUTER_COL: &str = "Outer";
-            let mut color_map = ColorMap::new();
-            color_map.insert(OUTER_COL.to_owned(), BLUE);
-
             // Start with a colored truncated dodecahedron
             let mut poly = Polyhedron::truncated_dodecahedron();
             for tri in poly.ngons(3) {
-                poly.color_face(tri, OUTER_COL);
+                poly.color_face(tri, "Outer");
             }
             // Excavate using cupolae and antiprisms to form the tunnels
             let mut inner_face = FaceIdx::new(0);
@@ -1032,25 +1012,17 @@ fn toroids() -> Vec<Model> {
             let inner = Polyhedron::dodecahedron();
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
 
-            Model::with_colors("Stephanie (Coloring B)".to_owned(), poly, color_map)
+            Model::new("Stephanie (Coloring B)".to_owned(), poly)
         },
         {
-            const PENTAGONS: &str = "Outer";
-            let mut color_map = ColorMap::new();
-            color_map.insert(PENTAGONS.to_owned(), Color32::BLACK);
-
             let mut poly = Polyhedron::truncated_icosahedron();
             for face in poly.ngons(5) {
-                poly.color_face(face, PENTAGONS);
+                poly.color_face(face, "Pentagons");
             }
 
-            Model::with_colors("Football".to_owned(), poly, color_map)
+            Model::new("Football".to_owned(), poly)
         },
         {
-            const TUNNEL_COLOR: &str = "Tunnel";
-            let mut color_map = ColorMap::new();
-            color_map.insert(TUNNEL_COLOR.to_owned(), BLUE);
-
             // Create a bicupola
             let PrismLike {
                 mut poly,
@@ -1063,7 +1035,7 @@ fn toroids() -> Vec<Model> {
                 .map(|(idx, _face)| idx)
                 .collect_vec();
             // Dig tunnel, and color it blue
-            poly.color_edges_added_by(TUNNEL_COLOR, |poly| {
+            poly.color_edges_added_by("Tunnel", |poly| {
                 poly.excavate_antiprism(bottom_face);
                 poly.excavate_antiprism(top_face);
             });
@@ -1074,17 +1046,11 @@ fn toroids() -> Vec<Model> {
                 }
             }
 
-            Model::with_colors("Apanar Deltahedron".to_owned(), poly, color_map)
+            Model::new("Apanar Deltahedron".to_owned(), poly)
         },
         {
-            const TRI_COLOR_NAME: &str = "Triangle";
-            const SQUARE_COLOR_NAME: &str = "Square";
-            let mut color_map = ColorMap::new();
-            color_map.insert(TRI_COLOR_NAME.to_owned(), BLUE);
-            color_map.insert(SQUARE_COLOR_NAME.to_owned(), RED);
-
-            let poly = prism_extended_cuboctahedron(TRI_COLOR_NAME, SQUARE_COLOR_NAME);
-            Model::with_colors("Christopher".to_owned(), poly, color_map)
+            let poly = prism_extended_cuboctahedron("Triangles", "Squares");
+            Model::new("Christopher".to_owned(), poly)
         },
     ];
 

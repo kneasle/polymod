@@ -1063,6 +1063,10 @@ impl Polyhedron {
 
     /* COLORS */
 
+    pub fn half_edge_colors(&self) -> &HashMap<(VertIdx, VertIdx), String> {
+        &self.half_edge_colors
+    }
+
     pub fn color_face(&mut self, face: FaceIdx, color_name: &str) {
         let verts = &self.get_face(face).verts.clone();
         for (v1, v2) in verts.iter().circular_tuple_windows() {
