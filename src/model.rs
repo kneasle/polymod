@@ -293,6 +293,7 @@ pub enum OwUnit {
     CustomDeg108,
     Deg120,
     Deg135,
+    Ow68,
 }
 
 #[derive(Debug, Clone)]
@@ -303,7 +304,7 @@ pub struct OwUnitGeometry {
 }
 
 impl OwUnit {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         OwUnit::Deg60,
         OwUnit::SturdyEdgeModule90,
         OwUnit::CustomDeg90,
@@ -311,6 +312,7 @@ impl OwUnit {
         OwUnit::CustomDeg108,
         OwUnit::Deg120,
         OwUnit::Deg135,
+        OwUnit::Ow68,
     ];
 
     /// If this `unit` is folded from paper with an aspect ratio of `paper_aspect`, what is the
@@ -332,6 +334,7 @@ impl OwUnit {
             OwUnit::CustomDeg108 => (DEG_108_REDUCTION, vec![Deg(108.0)]),
             OwUnit::Deg120 => (DEG_120_REDUCTION, vec![Deg(120.0)]),
             OwUnit::Deg135 => (DEG_135_REDUCTION, vec![Deg(135.0)]),
+            OwUnit::Ow68 => (DEG_135_REDUCTION, vec![Deg(120.0), Deg(135.0)]),
         };
         let length_reduction = paper_aspect * 0.25 * reduction_factor;
         let spine_length = 1.0 - length_reduction * 2.0;
@@ -351,6 +354,7 @@ impl OwUnit {
             OwUnit::CustomDeg108 => "Custom 108° unit",
             OwUnit::Deg120 => "Ow's 120° unit",
             OwUnit::Deg135 => "Ow's 135° unit",
+            OwUnit::Ow68 => "Ow's 120°/135° unit",
         }
     }
 }
@@ -764,6 +768,10 @@ pub fn builtin_models() -> Vec<Model> {
         model.full_name = full_builtin_name("Toroids", &model.full_name);
         all_models.push(model);
     }
+    for mut model in misc_models() {
+        model.full_name = full_builtin_name("Misc", &model.full_name);
+        all_models.push(model);
+    }
     all_models
 }
 
@@ -1073,6 +1081,58 @@ fn toroids() -> Vec<Model> {
     ];
 
     toroids.to_vec()
+}
+
+fn misc_models() -> Vec<Model> {
+    let models = [
+        {
+            let mut poly = Polyhedron::great_rhombicuboctahedron();
+            let mut color_face = |normal: Vec3, color: &str| {
+                let face_idx = poly.get_face_with_normal(normal);
+                for (v1, v2) in poly
+                    .get_face(face_idx)
+                    .verts()
+                    .to_vec()
+                    .into_iter()
+                    .circular_tuple_windows()
+                {
+                    poly.set_full_edge_color(EdgeId::new(v1, v2), color);
+                }
+            };
+            color_face(Vec3::unit_x(), "X");
+            color_face(-Vec3::unit_x(), "X");
+            color_face(Vec3::unit_y(), "Y");
+            color_face(-Vec3::unit_y(), "Y");
+            color_face(Vec3::unit_z(), "Z");
+            color_face(-Vec3::unit_z(), "Z");
+            let mut model = Model::new("XYZ Great Rhobicuboctahedron (A)".to_owned(), poly);
+            model.view_geometry_settings.paper_ratio_w = 1;
+            model.view_geometry_settings.paper_ratio_h = 1;
+            model.view_geometry_settings.unit = OwUnit::Ow68;
+            model.default_color = Color32::from_rgb(54, 54, 54);
+            model
+        },
+        {
+            let mut poly = Polyhedron::great_rhombicuboctahedron();
+            let mut color_face = |normal: Vec3, color: &str| {
+                let face_idx = poly.get_face_with_normal(normal);
+                poly.color_face(face_idx, color);
+            };
+            color_face(Vec3::unit_x(), "X");
+            color_face(-Vec3::unit_x(), "X");
+            color_face(Vec3::unit_y(), "Y");
+            color_face(-Vec3::unit_y(), "Y");
+            color_face(Vec3::unit_z(), "Z");
+            color_face(-Vec3::unit_z(), "Z");
+            let mut model = Model::new("XYZ Great Rhobicuboctahedron (B)".to_owned(), poly);
+            model.view_geometry_settings.paper_ratio_w = 1;
+            model.view_geometry_settings.paper_ratio_h = 1;
+            model.view_geometry_settings.unit = OwUnit::Ow68;
+            model.default_color = Color32::from_rgb(54, 54, 54);
+            model
+        },
+    ];
+    models.to_vec()
 }
 
 fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedron {

@@ -44,6 +44,37 @@ pub fn angle_in_spherical_triangle(a: Radians, b: Radians, c: Radians) -> Radian
     Radians::acos(cos_angle)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct PolygonGeom {
+    pub angle: f32,
+    pub in_radius: f32,
+    pub out_radius: f32,
+}
+
+impl PolygonGeom {
+    pub fn new(n: usize) -> Self {
+        let angle = std::f32::consts::PI * 2.0 / n as f32;
+        let in_radius = 1.0 / (2.0 * f32::tan(angle / 2.0));
+        let out_radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
+        Self {
+            angle,
+            in_radius,
+            out_radius,
+        }
+    }
+
+    pub fn point(&self, i: usize) -> (f32, f32) {
+        self.offset_point(i, 0.0)
+    }
+
+    pub fn offset_point(&self, i: usize, offset: f32) -> (f32, f32) {
+        let a = self.angle * (i as f32 + offset);
+        let x = a.sin() * self.out_radius;
+        let y = a.cos() * self.out_radius;
+        (x, y)
+    }
+}
+
 pub fn darken_color(c: Color32, factor: f32) -> Color32 {
     lerp_color(Color32::BLACK, c, factor)
 }

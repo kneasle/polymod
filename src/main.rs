@@ -25,6 +25,13 @@ const BIG_SPACE: f32 = 20.0;
 const SMALL_SPACE: f32 = 10.0;
 
 fn main() {
+    // Test
+    let mut models = crate::model::builtin_models();
+    let mut current_model_idx: usize = models
+        .iter()
+        .position(|m| m.name() == "Icosahedron")
+        .expect("No model with this name found");
+
     // Create window
     let window = Window::new(WindowSettings {
         title: "Polygon Modeller".to_string(),
@@ -33,13 +40,6 @@ fn main() {
     })
     .unwrap();
     let context = window.gl();
-
-    let mut models = crate::model::builtin_models();
-
-    let mut current_model_idx: usize = models
-        .iter()
-        .position(|m| m.name() == "Icosahedron")
-        .expect("No model with this name found");
 
     // GUI variables
     let mut show_external_angles = false;

@@ -10,7 +10,7 @@ use three_d::{
     vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Vec3, Vec4, Zero,
 };
 
-use crate::utils::{lerp3, Side};
+use crate::utils::{lerp3, PolygonGeom, Side};
 
 /// A polygonal model where all faces are regular and all edges have unit length.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -700,36 +700,6 @@ impl Polyhedron {
             bottom_face,
             poly,
         }
-    }
-}
-
-struct PolygonGeom {
-    angle: f32,
-    in_radius: f32,
-    out_radius: f32,
-}
-
-impl PolygonGeom {
-    fn new(n: usize) -> Self {
-        let angle = std::f32::consts::PI * 2.0 / n as f32;
-        let in_radius = 1.0 / (2.0 * f32::tan(angle / 2.0));
-        let out_radius = 1.0 / (2.0 * f32::sin(angle / 2.0));
-        Self {
-            angle,
-            in_radius,
-            out_radius,
-        }
-    }
-
-    fn point(&self, i: usize) -> (f32, f32) {
-        self.offset_point(i, 0.0)
-    }
-
-    fn offset_point(&self, i: usize, offset: f32) -> (f32, f32) {
-        let a = self.angle * (i as f32 + offset);
-        let x = a.sin() * self.out_radius;
-        let y = a.cos() * self.out_radius;
-        (x, y)
     }
 }
 
