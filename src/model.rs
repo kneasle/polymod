@@ -9,7 +9,7 @@ use three_d::{
 };
 
 use crate::{
-    polyhedron::{EdgeId, FaceIdx, PrismLike, Pyramid, VertIdx},
+    polyhedron::{Cube, EdgeId, FaceIdx, PrismLike, Pyramid, VertIdx},
     utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba, lerp_color},
 };
 use crate::{
@@ -690,7 +690,7 @@ fn edge_transform(p1: Vec3, p2: Vec3) -> Mat4 {
 pub fn builtin_models() -> Vec<Model> {
     let platonic = [
         ("Tetrahedron", Polyhedron::tetrahedron()),
-        ("Cube", Polyhedron::cube()),
+        ("Cube", Polyhedron::cube_poly()),
         ("Octahedron", Polyhedron::octahedron()),
         ("Dodecahedron", Polyhedron::dodecahedron()),
         ("Icosahedron", Polyhedron::icosahedron()),
@@ -1074,10 +1074,11 @@ fn toroids() -> Vec<Model> {
 
             Model::new("Apanar Deltahedron".to_owned(), poly)
         },
-        {
-            let poly = prism_extended_cuboctahedron("Triangles", "Squares");
-            Model::new("Christopher".to_owned(), poly)
-        },
+        Model::new(
+            "Christopher".to_owned(),
+            prism_extended_cuboctahedron("Triangles", "Squares"),
+        ),
+        Model::new("Cube Box".to_owned(), cube_box_col_a()),
     ];
 
     toroids.to_vec()
@@ -1189,6 +1190,78 @@ fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedr
     }
 
     // Centre the polyhedron and return it
+    poly.make_centred();
+    poly
+}
+
+fn cube_box_col_a() -> Polyhedron {
+    // Start with a central cube, which we'll use for the bottom-back-left corner
+    let Cube {
+        poly: cube,
+        left,
+        right,
+        top,
+        bottom,
+        front,
+        back,
+    } = Polyhedron::cube();
+
+    // Original cube becomes bottom-back-left central
+    let mut poly = cube.clone();
+    poly.extend_prism(left);
+    poly.extend_prism(back);
+    poly.extend_prism(bottom);
+    // Bottom-back-right
+    let new_right = poly.extend_prism(right);
+    let bbr_face_map = poly.extend(new_right, &cube, left, 0);
+    poly.extend_prism(bbr_face_map[back]);
+    poly.extend_prism(bbr_face_map[right]);
+    poly.extend_prism(bbr_face_map[bottom]);
+    // Top-back-left
+    let new_top = poly.extend_prism(top);
+    let tbl_face_map = poly.extend(new_top, &cube, bottom, 0);
+    poly.extend_prism(tbl_face_map[back]);
+    poly.extend_prism(tbl_face_map[left]);
+    poly.extend_prism(tbl_face_map[top]);
+    // Bottom-front-left
+    let new_front = poly.extend_prism(front);
+    let bfl_face_map = poly.extend(new_front, &cube, back, 0);
+    poly.extend_prism(bfl_face_map[front]);
+    poly.extend_prism(bfl_face_map[left]);
+    poly.extend_prism(bfl_face_map[bottom]);
+    // Top-back-right
+    let new_top = poly.extend_prism(bbr_face_map[top]);
+    let tbr_face_map = poly.extend(new_top, &cube, bottom, 0);
+    poly.extend_prism(tbr_face_map[left]); // Links to top-back-left
+    poly.extend_prism(tbr_face_map[back]);
+    poly.extend_prism(tbr_face_map[right]);
+    poly.extend_prism(tbr_face_map[top]);
+    // Top-front-left
+    let new_top = poly.extend_prism(bfl_face_map[top]);
+    let tfl_face_map = poly.extend(new_top, &cube, bottom, 0);
+    poly.extend_prism(tfl_face_map[back]); // Links to top-back-left
+    poly.extend_prism(tfl_face_map[front]);
+    poly.extend_prism(tfl_face_map[left]);
+    poly.extend_prism(tfl_face_map[top]);
+    // Bottom-front-right
+    let new_right = poly.extend_prism(bfl_face_map[right]);
+    let bfr_face_map = poly.extend(new_right, &cube, left, 0);
+    poly.extend_prism(bfr_face_map[back]); // Links to bottom-back-right
+    poly.extend_prism(bfr_face_map[front]);
+    poly.extend_prism(bfr_face_map[right]);
+    poly.extend_prism(bfr_face_map[bottom]);
+    // Top-front-right
+    let new_top = poly.extend_prism(bfr_face_map[top]);
+    let tfr_face_map = poly.extend(new_top, &cube, bottom, 0);
+    poly.extend_prism(tfr_face_map[back]); // Links to top-back-right
+    poly.extend_prism(tfr_face_map[left]); // Links to top-front-left
+    poly.extend_prism(tfr_face_map[front]);
+    poly.extend_prism(tfr_face_map[right]);
+    poly.extend_prism(tfr_face_map[top]);
+
+    // let top = poly.extend_prism(top);
+    // let front = poly.extend_prism(front);
+
     poly.make_centred();
     poly
 }

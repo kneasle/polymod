@@ -125,13 +125,65 @@ pub struct PrismLike {
     pub top_face: FaceIdx,
 }
 
+#[derive(Debug, Clone)]
+pub struct Cube {
+    pub poly: Polyhedron,
+    pub left: FaceIdx,   // -X
+    pub right: FaceIdx,  // +X
+    pub bottom: FaceIdx, // -Y
+    pub top: FaceIdx,    // +Y
+    pub back: FaceIdx,   // -Z
+    pub front: FaceIdx,  // +Z
+}
+
 /// Platonic solids
 impl Polyhedron {
     pub fn tetrahedron() -> Self {
         Self::pyramid(3).poly
     }
 
-    pub fn cube() -> Self {
+    pub fn cube() -> Cube {
+        /*       2-------3            y
+         *      /|      /|            ^
+         *     / |     / |            |
+         *    6-------7  |            |
+         *    |  0----|--1            +--------> x
+         *    | /     | /            /
+         *    |/      |/            /
+         *    4-------5            z
+         */
+
+        // Build model
+        let verts = vec![
+            /* 0 */ Vec3::new(-0.5, -0.5, -0.5),
+            /* 1 */ Vec3::new(0.5, -0.5, -0.5),
+            /* 2 */ Vec3::new(-0.5, 0.5, -0.5),
+            /* 3 */ Vec3::new(0.5, 0.5, -0.5),
+            /* 4 */ Vec3::new(-0.5, -0.5, 0.5),
+            /* 5 */ Vec3::new(0.5, -0.5, 0.5),
+            /* 6 */ Vec3::new(-0.5, 0.5, 0.5),
+            /* 7 */ Vec3::new(0.5, 0.5, 0.5),
+        ];
+        let mut faces = FaceVec::new();
+        let left = faces.push(vec![0, 4, 6, 2]);
+        let right = faces.push(vec![1, 3, 7, 5]);
+        let bottom = faces.push(vec![0, 1, 5, 4]);
+        let top = faces.push(vec![2, 6, 7, 3]);
+        let back = faces.push(vec![0, 2, 3, 1]);
+        let front = faces.push(vec![4, 5, 7, 6]);
+        // Collect into `Cube`
+        Cube {
+            poly: Self::new(verts, faces),
+            left,
+            right,
+            bottom,
+            top,
+            back,
+            front,
+        }
+    }
+
+    pub fn cube_poly() -> Self {
         Self::prism(4).poly
     }
 
@@ -175,7 +227,7 @@ impl Polyhedron {
     /* Cubic/octahedral */
 
     pub fn truncated_cube() -> Self {
-        Self::cube().truncate_platonic(TruncationType::Standard)
+        Self::cube_poly().truncate_platonic(TruncationType::Standard)
     }
 
     pub fn truncated_octahedron() -> Self {
@@ -183,7 +235,7 @@ impl Polyhedron {
     }
 
     pub fn cuboctahedron() -> Self {
-        Self::cube().truncate_platonic(TruncationType::Alternation)
+        Self::cube_poly().truncate_platonic(TruncationType::Alternation)
     }
 
     pub fn snub_cube() -> Self {
@@ -193,15 +245,15 @@ impl Polyhedron {
         let face_rotation_radians = f32::atan(t);
         let rotation_as_edges = face_rotation_radians / (2.0 * PI) * 4.0;
         let new_radius = t / alpha;
-        Self::cube().snub_platonic(new_radius, rotation_as_edges)
+        Self::cube_poly().snub_platonic(new_radius, rotation_as_edges)
     }
 
     pub fn rhombicuboctahedron() -> Self {
-        Self::cube().rhombicosi_platonic(Greatness::Lesser)
+        Self::cube_poly().rhombicosi_platonic(Greatness::Lesser)
     }
 
     pub fn great_rhombicuboctahedron() -> Self {
-        Self::cube().rhombicosi_platonic(Greatness::Great)
+        Self::cube_poly().rhombicosi_platonic(Greatness::Great)
     }
 
     /* Dodecaheral/icosahedral */
