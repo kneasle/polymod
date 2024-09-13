@@ -513,7 +513,11 @@ impl Polyhedron {
         // Faces
         let mut faces = FaceVec::new();
         let top_face = faces.push((0..n).map(|i| i * 2 + 1).collect_vec());
-        let bottom_face = faces.push((0..n).rev().map(|i| i * 2).collect_vec());
+        let bottom_face = faces.push({
+            let mut verts = (0..n).map(|i| i * 2).collect_vec();
+            verts[1..].reverse(); // Reverse the faces, leaving the 0th vertex in place
+            verts
+        });
         for i1 in 0..n {
             let i2 = (i1 + 1) % n;
             faces.push(vec![i1 * 2 + 1, i1 * 2, i2 * 2, i2 * 2 + 1]); // Side faces

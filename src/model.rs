@@ -1180,7 +1180,7 @@ fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedr
         if !poly.is_face(opposite_face) {
             continue; // Connecting to something which already exists
         }
-        let face_mapping = poly.extend(opposite_face, pyramid, side_faces[0], 2);
+        let face_mapping = poly.extend(opposite_face, pyramid, side_faces[0], 0);
 
         // Add new faces to extend
         for &source_side_face in side_faces {
