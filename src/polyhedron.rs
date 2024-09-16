@@ -1117,6 +1117,15 @@ impl Polyhedron {
             .insert((v1, v2), color_name.to_owned());
     }
 
+    pub fn reset_full_edge_color(&mut self, v1: VertIdx, v2: VertIdx) {
+        self.reset_half_edge_color(v1, v2);
+        self.reset_half_edge_color(v2, v1);
+    }
+
+    pub fn reset_half_edge_color(&mut self, v1: VertIdx, v2: VertIdx) {
+        self.half_edge_colors.remove(&(v1, v2));
+    }
+
     pub fn get_edge_side_color(&self, a: VertIdx, b: VertIdx) -> Option<&str> {
         self.half_edge_colors.get(&(a, b)).map(String::as_str)
     }
@@ -1378,6 +1387,17 @@ impl Edge {
 
     pub fn dihedral_angle(&self) -> Option<Radians> {
         self.closed.as_ref().map(|c| c.dihedral_angle)
+    }
+
+    #[expect(dead_code)]
+    pub fn is_convex(&self) -> bool {
+        self.dihedral_angle()
+            .is_some_and(|a| a < Rad::from(Deg(180.0)))
+    }
+
+    pub fn is_concave(&self) -> bool {
+        self.dihedral_angle()
+            .is_some_and(|a| a > Rad::from(Deg(180.0)))
     }
 
     pub fn angle_type(&self) -> EdgeAngleType {

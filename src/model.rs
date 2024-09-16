@@ -1078,7 +1078,8 @@ fn toroids() -> Vec<Model> {
             "Christopher".to_owned(),
             prism_extended_cuboctahedron("Triangles", "Squares"),
         ),
-        Model::new("Cube Box".to_owned(), cube_box_col_a()),
+        Model::new("Cube Box (Color A)".to_owned(), cube_box_col_a(false)),
+        Model::new("Cube Box (Color B)".to_owned(), cube_box_col_a(true)),
     ];
 
     toroids.to_vec()
@@ -1194,7 +1195,7 @@ fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedr
     poly
 }
 
-fn cube_box_col_a() -> Polyhedron {
+fn cube_box_col_a(use_concave_color: bool) -> Polyhedron {
     // Start with a central cube, which we'll use for the bottom-back-left corner
     let Cube {
         poly: cube,
@@ -1208,62 +1209,89 @@ fn cube_box_col_a() -> Polyhedron {
 
     // Original cube becomes bottom-back-left central
     let mut poly = cube.clone();
-    poly.extend_prism(left);
-    poly.extend_prism(back);
-    poly.extend_prism(bottom);
+    macro_rules! extend_colored {
+        ($face: expr) => {{
+            extend_prism_with_axis_color(&mut poly, $face)
+        }};
+    }
+    extend_colored!(left);
+    extend_colored!(back);
+    extend_colored!(bottom);
     // Bottom-back-right
-    let new_right = poly.extend_prism(right);
+    let new_right = extend_colored!(right);
     let bbr_face_map = poly.extend(new_right, &cube, left, 0);
-    poly.extend_prism(bbr_face_map[back]);
-    poly.extend_prism(bbr_face_map[right]);
-    poly.extend_prism(bbr_face_map[bottom]);
+    extend_colored!(bbr_face_map[back]);
+    extend_colored!(bbr_face_map[right]);
+    extend_colored!(bbr_face_map[bottom]);
     // Top-back-left
-    let new_top = poly.extend_prism(top);
+    let new_top = extend_colored!(top);
     let tbl_face_map = poly.extend(new_top, &cube, bottom, 0);
-    poly.extend_prism(tbl_face_map[back]);
-    poly.extend_prism(tbl_face_map[left]);
-    poly.extend_prism(tbl_face_map[top]);
+    extend_colored!(tbl_face_map[back]);
+    extend_colored!(tbl_face_map[left]);
+    extend_colored!(tbl_face_map[top]);
     // Bottom-front-left
-    let new_front = poly.extend_prism(front);
+    let new_front = extend_colored!(front);
     let bfl_face_map = poly.extend(new_front, &cube, back, 0);
-    poly.extend_prism(bfl_face_map[front]);
-    poly.extend_prism(bfl_face_map[left]);
-    poly.extend_prism(bfl_face_map[bottom]);
+    extend_colored!(bfl_face_map[front]);
+    extend_colored!(bfl_face_map[left]);
+    extend_colored!(bfl_face_map[bottom]);
     // Top-back-right
-    let new_top = poly.extend_prism(bbr_face_map[top]);
+    let new_top = extend_colored!(bbr_face_map[top]);
     let tbr_face_map = poly.extend(new_top, &cube, bottom, 0);
-    poly.extend_prism(tbr_face_map[left]); // Links to top-back-left
-    poly.extend_prism(tbr_face_map[back]);
-    poly.extend_prism(tbr_face_map[right]);
-    poly.extend_prism(tbr_face_map[top]);
+    extend_colored!(tbr_face_map[left]); // Links to top-back-left
+    extend_colored!(tbr_face_map[back]);
+    extend_colored!(tbr_face_map[right]);
+    extend_colored!(tbr_face_map[top]);
     // Top-front-left
-    let new_top = poly.extend_prism(bfl_face_map[top]);
+    let new_top = extend_colored!(bfl_face_map[top]);
     let tfl_face_map = poly.extend(new_top, &cube, bottom, 0);
-    poly.extend_prism(tfl_face_map[back]); // Links to top-back-left
-    poly.extend_prism(tfl_face_map[front]);
-    poly.extend_prism(tfl_face_map[left]);
-    poly.extend_prism(tfl_face_map[top]);
+    extend_colored!(tfl_face_map[back]); // Links to top-back-left
+    extend_colored!(tfl_face_map[front]);
+    extend_colored!(tfl_face_map[left]);
+    extend_colored!(tfl_face_map[top]);
     // Bottom-front-right
-    let new_right = poly.extend_prism(bfl_face_map[right]);
+    let new_right = extend_colored!(bfl_face_map[right]);
     let bfr_face_map = poly.extend(new_right, &cube, left, 0);
-    poly.extend_prism(bfr_face_map[back]); // Links to bottom-back-right
-    poly.extend_prism(bfr_face_map[front]);
-    poly.extend_prism(bfr_face_map[right]);
-    poly.extend_prism(bfr_face_map[bottom]);
+    extend_colored!(bfr_face_map[back]); // Links to bottom-back-right
+    extend_colored!(bfr_face_map[front]);
+    extend_colored!(bfr_face_map[right]);
+    extend_colored!(bfr_face_map[bottom]);
     // Top-front-right
-    let new_top = poly.extend_prism(bfr_face_map[top]);
+    let new_top = extend_colored!(bfr_face_map[top]);
     let tfr_face_map = poly.extend(new_top, &cube, bottom, 0);
-    poly.extend_prism(tfr_face_map[back]); // Links to top-back-right
-    poly.extend_prism(tfr_face_map[left]); // Links to top-front-left
-    poly.extend_prism(tfr_face_map[front]);
-    poly.extend_prism(tfr_face_map[right]);
-    poly.extend_prism(tfr_face_map[top]);
+    extend_colored!(tfr_face_map[back]); // Links to top-back-right
+    extend_colored!(tfr_face_map[left]); // Links to top-front-left
+    extend_colored!(tfr_face_map[front]);
+    extend_colored!(tfr_face_map[right]);
+    extend_colored!(tfr_face_map[top]);
 
-    // let top = poly.extend_prism(top);
-    // let front = poly.extend_prism(front);
+    // Color concave edges black
+    if use_concave_color {
+        for e in poly.edges() {
+            if e.is_concave() {
+                poly.reset_full_edge_color(e.top_vert, e.bottom_vert);
+            }
+        }
+    }
 
     poly.make_centred();
     poly
+}
+
+fn extend_prism_with_axis_color(poly: &mut Polyhedron, face: FaceIdx) -> FaceIdx {
+    // Determine which axis the face is in
+    let normal = poly.get_face(face).normal(poly);
+    let color = if normal.dot(Vec3::unit_x()).abs() > 0.99999 {
+        "X"
+    } else if normal.dot(Vec3::unit_y()).abs() > 0.99999 {
+        "Y"
+    } else {
+        assert!(normal.dot(Vec3::unit_z()).abs() > 0.99999);
+        // Implicitly must be z
+        "Z"
+    };
+
+    poly.color_faces_added_by(color, |poly| poly.extend_prism(face))
 }
 
 fn full_builtin_name(group_name: &str, model_name: &str) -> String {
