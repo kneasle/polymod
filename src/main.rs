@@ -18,6 +18,7 @@ use model::{Model, OwUnitGeometry};
 
 mod model;
 mod polyhedron;
+mod shapes;
 mod utils;
 mod viewport;
 
@@ -26,7 +27,7 @@ const SMALL_SPACE: f32 = 10.0;
 
 fn main() {
     // Test
-    let mut models = crate::model::builtin_models();
+    let mut models = crate::shapes::all();
     let mut current_model_idx: usize = models
         .iter()
         .position(|m| m.name() == "Robin (Color B)")
@@ -84,7 +85,7 @@ fn main() {
                                 ui.heading("General Model Settings");
                                 ui.horizontal(|ui| {
                                     ui.label("Name:");
-                                    ui.text_edit_singleline(model.full_name_mut());
+                                    ui.text_edit_singleline(&mut model.full_name);
                                 });
                                 ui.add_space(SMALL_SPACE);
                                 ui.heading("View");
@@ -181,6 +182,7 @@ impl<'models> ModelTree<'models> {
             if idx == current_model_idx {
                 ui.strong(name);
             } else {
+                // If not selected, display as a button which can be clicked to select this model
                 if ui.button(name).clicked() {
                     *current_model_idx = *idx;
                 }
