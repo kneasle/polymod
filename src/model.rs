@@ -10,7 +10,7 @@ use three_d::{
 
 use crate::{
     polyhedron::{Cube, EdgeId, FaceIdx, PrismLike, Pyramid, VertIdx},
-    utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba, lerp_color},
+    utils::{angle_in_spherical_triangle, darken_color, egui_color_to_srgba, lerp_color, Axis},
 };
 use crate::{
     polyhedron::{Face, Polyhedron},
@@ -1074,15 +1074,74 @@ fn toroids() -> Vec<Model> {
 
             Model::new("Apanar Deltahedron".to_owned(), poly)
         },
-        Model::new(
-            "Christopher".to_owned(),
-            prism_extended_cuboctahedron("Triangles", "Squares"),
-        ),
+        {
+            let tri_pyramid = PrismExtensionSection::pyramid(3, Some("Triangles"));
+            let quad_pyramid = PrismExtensionSection::pyramid(4, Some("Squares"));
+            let poly = prism_extended_cuboctahedron(&tri_pyramid, &quad_pyramid);
+            Model::new("Christopher".to_owned(), poly)
+        },
+        Model::new("Robin (Color A)".to_owned(), robin(false)),
+        Model::new("Robin (Color B)".to_owned(), robin(true)),
         Model::new("Cube Box (Color A)".to_owned(), cube_box_col_a(false)),
         Model::new("Cube Box (Color B)".to_owned(), cube_box_col_a(true)),
     ];
 
     toroids.to_vec()
+}
+
+fn robin(color_all_faces: bool) -> Polyhedron {
+    // Create a `PrismExtensionSection` for a cupola
+    const COLOR_NAME: &str = "Cupolae";
+    let mut cupola = Polyhedron::cupola_with_top(4).poly;
+    cupola.color_all_edges(COLOR_NAME);
+    let cupola_section = PrismExtensionSection {
+        side_faces: cupola.ngons(3),
+        poly: cupola,
+    };
+    // Combine it with triangular prisms to build the model
+    let tri_pyramid = PrismExtensionSection::pyramid(3, None);
+    let mut poly = prism_extended_cuboctahedron(&cupola_section, &tri_pyramid);
+    // Add extra colours along the prisms
+    for e in poly.edges() {
+        let is_about_60_degrees = e
+            .dihedral_angle()
+            .is_some_and(|Deg(a)| (a - 60.0).abs() < 0.001);
+        if is_about_60_degrees {
+            poly.set_full_edge_color(e.id(), COLOR_NAME);
+        }
+    }
+    // Redo colouring by axis
+    if color_all_faces {
+        for face_idx in poly.face_indices() {
+            if poly.face_order(face_idx) == 3 {
+                // Colour each edge of the triangle differently
+                let edges_round_face = poly.get_face(face_idx).verts().to_vec();
+                for (v1, v2) in edges_round_face.into_iter().circular_tuple_windows() {
+                    let midpoint = (poly.vert_pos(v1) + poly.vert_pos(v2)) / 2.0;
+                    let nearest_axis_name = Axis::nearest_to(midpoint).name();
+                    poly.set_half_edge_color(v2, v1, nearest_axis_name);
+                }
+            } else {
+                // Color each other face by its nearest axis
+                let nearest_axis = Axis::nearest_to(poly.face_centroid(face_idx));
+                poly.color_face(face_idx, nearest_axis.name());
+            }
+        }
+    } else {
+        for edge in poly.edges() {
+            let nearest_axis = Axis::nearest_to(edge.midpoint(&poly));
+            let verts = [
+                (edge.top_vert, edge.bottom_vert),
+                (edge.bottom_vert, edge.top_vert),
+            ];
+            for (v1, v2) in verts {
+                if poly.get_edge_side_color(v1, v2).is_some() {
+                    poly.set_half_edge_color(v1, v2, nearest_axis.name());
+                }
+            }
+        }
+    }
+    poly
 }
 
 fn misc_models() -> Vec<Model> {
@@ -1137,17 +1196,24 @@ fn misc_models() -> Vec<Model> {
     models.to_vec()
 }
 
-fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedron {
-    // Make the pyramids out of which the cuboctahedron's faces will be constructed
-    let make_pyramid = |n: usize, color_name: &str| -> (Polyhedron, Vec<FaceIdx>) {
+#[derive(Debug, Clone)]
+struct PrismExtensionSection {
+    poly: Polyhedron,
+    side_faces: Vec<FaceIdx>,
+}
+
+impl PrismExtensionSection {
+    fn pyramid(n: usize, color_name: Option<&str>) -> Self {
         let Pyramid {
             mut poly,
             base_face,
         } = Polyhedron::pyramid(n);
         // Color the base face
-        let verts = &poly.get_face(base_face).verts().to_vec();
-        for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
-            poly.set_half_edge_color(v2, v1, color_name);
+        if let Some(color_name) = color_name {
+            let verts = &poly.get_face(base_face).verts().to_vec();
+            for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
+                poly.set_half_edge_color(v2, v1, color_name);
+            }
         }
         // Get the side faces
         let side_faces = poly
@@ -1155,38 +1221,52 @@ fn prism_extended_cuboctahedron(tri_color: &str, square_color: &str) -> Polyhedr
             .map(|(id, _)| id)
             .filter(|id| *id != base_face)
             .collect_vec();
-        (poly, side_faces)
-    };
-    let (tri_pyramid, tri_pyramid_side_faces) = make_pyramid(3, tri_color);
-    let (quad_pyramid, quad_pyramid_side_faces) = make_pyramid(4, square_color);
+        Self { poly, side_faces }
+    }
+}
+
+fn prism_extended_cuboctahedron(
+    section_a: &PrismExtensionSection,
+    section_b: &PrismExtensionSection,
+) -> Polyhedron {
+    /// Which section should be created on the other end of a pyramid
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum SectionType {
+        A,
+        B,
+    }
 
     // Recursively build the polyhedron
-    let mut poly = quad_pyramid.clone();
-    let mut faces_to_expand = quad_pyramid_side_faces
+    let mut poly = section_a.poly.clone();
+    let mut faces_to_expand = section_a
+        .side_faces
         .iter()
-        .map(|idx| (*idx, 3))
+        .map(|idx| (*idx, SectionType::B)) // The other sides will all be Bs
         .collect_vec();
-    while let Some((face_to_extend, order_of_new_pyramid)) = faces_to_expand.pop() {
-        // Get which pyramid we're going to add
-        let (pyramid, side_faces, next_pyramid_order) = match order_of_new_pyramid {
-            3 => (&tri_pyramid, &tri_pyramid_side_faces, 4),
-            4 => (&quad_pyramid, &quad_pyramid_side_faces, 3),
-            _ => unreachable!(),
+    while let Some((face_to_extend, next_section_type)) = faces_to_expand.pop() {
+        let (next_section, other_section_type) = match next_section_type {
+            SectionType::A => (&section_a, SectionType::B),
+            SectionType::B => (&section_b, SectionType::A),
         };
 
         // Add prism and pyramid
         if !poly.is_face(face_to_extend) {
-            continue; // Face has already been connected to something
+            continue; // Face has already been connected from the other side
         }
         let opposite_face = poly.extend_prism(face_to_extend);
         if !poly.is_face(opposite_face) {
-            continue; // Connecting to something which already exists
+            continue; // Connecting to a section which already exists
         }
-        let face_mapping = poly.extend(opposite_face, pyramid, side_faces[0], 0);
+        let face_mapping = poly.extend(
+            opposite_face,
+            &next_section.poly,
+            next_section.side_faces[0],
+            0,
+        );
 
         // Add new faces to extend
-        for &source_side_face in side_faces {
-            faces_to_expand.push((face_mapping[source_side_face], next_pyramid_order));
+        for &source_side_face in &next_section.side_faces {
+            faces_to_expand.push((face_mapping[source_side_face], other_section_type));
         }
     }
 
@@ -1281,16 +1361,7 @@ fn cube_box_col_a(use_concave_color: bool) -> Polyhedron {
 fn extend_prism_with_axis_color(poly: &mut Polyhedron, face: FaceIdx) -> FaceIdx {
     // Determine which axis the face is in
     let normal = poly.get_face(face).normal(poly);
-    let color = if normal.dot(Vec3::unit_x()).abs() > 0.99999 {
-        "X"
-    } else if normal.dot(Vec3::unit_y()).abs() > 0.99999 {
-        "Y"
-    } else {
-        assert!(normal.dot(Vec3::unit_z()).abs() > 0.99999);
-        // Implicitly must be z
-        "Z"
-    };
-
+    let color = Axis::exact_axis(normal).unwrap().name();
     poly.color_faces_added_by(color, |poly| poly.extend_prism(face))
 }
 

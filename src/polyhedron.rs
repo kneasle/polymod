@@ -7,7 +7,7 @@ use std::{
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use three_d::{
-    vec3, Angle, Deg, InnerSpace, Mat4, MetricSpace, Rad, Radians, SquareMatrix, Vec3, Vec4, Zero,
+    vec3, Angle, Deg, Degrees, InnerSpace, Mat4, MetricSpace, Rad, SquareMatrix, Vec3, Vec4, Zero,
 };
 
 use crate::utils::{lerp3, PolygonGeom, Side};
@@ -366,7 +366,7 @@ impl Polyhedron {
             Greatness::Great => face_order * 2,
         };
         let dihedral_angle = self.edges()[0].dihedral_angle().unwrap();
-        let angle_between_adjacent_face_normals = Radians::from(Deg(180.0)) - dihedral_angle;
+        let angle_between_adjacent_face_normals = Deg(180.0) - dihedral_angle;
         // Determine model's scaling factor
         let new_face_geometry = PolygonGeom::new(new_face_order);
         let alpha = angle_between_adjacent_face_normals / 2.0;
@@ -1375,7 +1375,7 @@ pub struct Edge {
 #[derive(Debug, Clone)]
 pub struct ClosedEdgeData {
     pub left_face: FaceIdx,
-    pub dihedral_angle: Radians,
+    pub dihedral_angle: Degrees,
 }
 
 impl Edge {
@@ -1385,25 +1385,22 @@ impl Edge {
         v1.distance(v2)
     }
 
-    pub fn dihedral_angle(&self) -> Option<Radians> {
+    pub fn dihedral_angle(&self) -> Option<Degrees> {
         self.closed.as_ref().map(|c| c.dihedral_angle)
     }
 
     #[expect(dead_code)]
     pub fn is_convex(&self) -> bool {
-        self.dihedral_angle()
-            .is_some_and(|a| a < Rad::from(Deg(180.0)))
+        self.angle_type() == EdgeAngleType::Convex
     }
 
     pub fn is_concave(&self) -> bool {
-        self.dihedral_angle()
-            .is_some_and(|a| a > Rad::from(Deg(180.0)))
+        self.angle_type() == EdgeAngleType::Concave
     }
 
     pub fn angle_type(&self) -> EdgeAngleType {
-        let half_turn = Radians::full_turn() / 2.0;
         match self.dihedral_angle() {
-            Some(angle) => match angle.partial_cmp(&half_turn).unwrap() {
+            Some(angle) => match angle.partial_cmp(&Deg(180.0)).unwrap() {
                 Ordering::Less => EdgeAngleType::Convex,
                 Ordering::Equal => EdgeAngleType::Planar,
                 Ordering::Greater => EdgeAngleType::Concave,
@@ -1435,7 +1432,7 @@ impl Edge {
         });
     }
 
-    fn get_dihedral_angle(&self, left_face: FaceIdx, polyhedron: &Polyhedron) -> Radians {
+    fn get_dihedral_angle(&self, left_face: FaceIdx, polyhedron: &Polyhedron) -> Degrees {
         let direction = (polyhedron.vert_pos(self.top_vert)
             - polyhedron.vert_pos(self.bottom_vert))
         .normalize();
@@ -1446,12 +1443,18 @@ impl Edge {
         let left_tangent = left_normal.cross(direction);
         let right_tangent = right_normal.cross(-direction);
         // Use these four vectors to compute the dihedral angle
-        let mut dihedral = left_tangent.angle(right_tangent);
+        let mut dihedral = Degrees::from(left_tangent.angle(right_tangent));
         let is_concave = left_tangent.dot(right_normal) < 0.0;
         if is_concave {
-            dihedral = Radians::full_turn() - dihedral;
+            dihedral = Degrees::full_turn() - dihedral;
         }
         dihedral
+    }
+
+    pub fn midpoint(&self, polyhedron: &Polyhedron) -> Vec3 {
+        let top_pos = polyhedron.vert_pos(self.top_vert);
+        let bottom_pos = polyhedron.vert_pos(self.bottom_vert);
+        (top_pos + bottom_pos) / 2.0
     }
 }
 

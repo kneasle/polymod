@@ -7,6 +7,61 @@ use three_d::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Axis {
+    X,
+    Y,
+    Z,
+}
+
+impl Axis {
+    const ALL: [Self; 3] = [Self::X, Self::Y, Self::Z];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Axis::X => "X",
+            Axis::Y => "Y",
+            Axis::Z => "Z",
+        }
+    }
+
+    pub fn vector_pos(self) -> Vec3 {
+        match self {
+            Axis::X => Vec3::unit_x(),
+            Axis::Y => Vec3::unit_y(),
+            Axis::Z => Vec3::unit_z(),
+        }
+    }
+
+    #[expect(dead_code)]
+    pub fn vector_neg(self) -> Vec3 {
+        -self.vector_pos()
+    }
+
+    pub fn nearest_to(direction: Vec3) -> Self {
+        let mut closest_axis = Self::X;
+        let mut closest_abs_dot_product = 0.0;
+        for axis in Self::ALL {
+            let abs_dot = direction.dot(axis.vector_pos()).abs();
+            if abs_dot > closest_abs_dot_product {
+                closest_axis = axis;
+                closest_abs_dot_product = abs_dot;
+            }
+        }
+        closest_axis
+    }
+
+    pub fn exact_axis(direction: Vec3) -> Option<Self> {
+        for axis in Self::ALL {
+            let normalized_abs_dot = direction.dot(axis.vector_pos()).abs() / direction.magnitude();
+            if normalized_abs_dot >= 0.999 {
+                return Some(axis);
+            }
+        }
+        None
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Out,
     In,
