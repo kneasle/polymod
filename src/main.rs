@@ -30,7 +30,7 @@ fn main() {
     let mut models = crate::shapes::all();
     let mut current_model_idx: usize = models
         .iter()
-        .position(|m| m.name() == "Robin (Color B)")
+        .position(|m| m.name() == "Robin")
         .expect("No model with this name found");
 
     // Create window

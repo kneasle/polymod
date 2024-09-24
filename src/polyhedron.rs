@@ -1451,6 +1451,7 @@ impl Edge {
         dihedral
     }
 
+    #[expect(dead_code)]
     pub fn midpoint(&self, polyhedron: &Polyhedron) -> Vec3 {
         let top_pos = polyhedron.vert_pos(self.top_vert);
         let bottom_pos = polyhedron.vert_pos(self.bottom_vert);

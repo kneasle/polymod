@@ -20,7 +20,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Model {
     pub full_name: String,
-    pub polyhedron: Polyhedron,
+    pub poly: Polyhedron,
 
     // Display settings & Coloring
     pub view_geometry_settings: ViewGeomSettings,
@@ -32,20 +32,31 @@ pub type ColorMap = IndexMap<String, Color32>;
 
 impl Model {
     pub fn new(full_name: String, poly: Polyhedron) -> Self {
-        Self::with_colors(full_name, poly, ColorMap::new())
-    }
-
-    pub fn with_colors(full_name: String, poly: Polyhedron, colors: ColorMap) -> Self {
         let mut model = Self {
             full_name,
-            polyhedron: poly,
+            poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
             default_color: Color32::GRAY,
-            colors,
+            colors: ColorMap::new(),
         };
         model.fill_color_map();
         model
+    }
+
+    pub fn with_ow_unit(
+        mut self,
+        ow_unit: OwUnit,
+        paper_ratio_w: usize,
+        paper_ratio_h: usize,
+    ) -> Self {
+        self.view_geometry_settings.style = FaceGeomStyle::OwLikeAngled;
+        self.view_geometry_settings.unit = ow_unit;
+        self.view_geometry_settings.paper_ratio_w = paper_ratio_w;
+        self.view_geometry_settings.paper_ratio_h = paper_ratio_h;
+        self.view_geometry_settings.wireframe_edges = false;
+        self.view_geometry_settings.wireframe_verts = false;
+        self
     }
 
     pub const PATH_DELIMITER: char = '\\';
@@ -72,7 +83,7 @@ impl Model {
     }
 
     pub fn polyhedron(&self) -> &Polyhedron {
-        &self.polyhedron
+        &self.poly
     }
 
     pub fn view_geometry_settings(&self) -> &ViewGeomSettings {
@@ -111,7 +122,7 @@ impl Model {
         const GREEN: Color32 = Color32::from_rgb(90, 255, 51);
 
         let mut color_iter = [BLUE, RED, GREEN].into_iter().cycle();
-        for color in self.polyhedron.half_edge_colors().values() {
+        for color in self.poly.half_edge_colors().values() {
             if !self.colors.contains_key(color) {
                 self.colors
                     .insert(color.to_owned(), color_iter.next().unwrap());
@@ -120,7 +131,7 @@ impl Model {
     }
 
     pub fn get_edge_side_color(&self, v1: VertIdx, v2: VertIdx) -> Color32 {
-        let color_name = self.polyhedron.get_edge_side_color(v1, v2);
+        let color_name = self.poly.get_edge_side_color(v1, v2);
         *color_name
             .and_then(|name| self.colors.get(name))
             .unwrap_or(&self.default_color)
@@ -170,7 +181,7 @@ pub enum FaceGeomStyle {
 impl Default for ViewGeomSettings {
     fn default() -> Self {
         ViewGeomSettings {
-            style: FaceGeomStyle::OwLikeAngled,
+            style: FaceGeomStyle::Solid,
             side_ratio: 0.25,
 
             paper_ratio_w: 3,
@@ -179,8 +190,8 @@ impl Default for ViewGeomSettings {
             direction: Side::In,
             add_crinkle: false,
 
-            wireframe_edges: false,
-            wireframe_verts: false,
+            wireframe_edges: true,
+            wireframe_verts: true,
         }
     }
 }
@@ -280,6 +291,7 @@ pub enum OwUnit {
     SturdyEdgeModule90,
     CustomDeg90,
     Custom3468,
+    Custom468,
     CustomDeg108,
     Deg120,
     Deg135,
@@ -321,6 +333,7 @@ impl OwUnit {
             OwUnit::SturdyEdgeModule90 => (0.5, vec![Deg(90.0)]),
             OwUnit::CustomDeg90 => (1.0, vec![Deg(90.0)]),
             OwUnit::Custom3468 => (1.0, vec![Deg(60.0), Deg(90.0), Deg(120.0), Deg(135.0)]),
+            OwUnit::Custom468 => (1.0, vec![Deg(90.0), Deg(120.0), Deg(135.0)]),
             OwUnit::CustomDeg108 => (DEG_108_REDUCTION, vec![Deg(108.0)]),
             OwUnit::Deg120 => (DEG_120_REDUCTION, vec![Deg(120.0)]),
             OwUnit::Deg135 => (DEG_135_REDUCTION, vec![Deg(135.0)]),
@@ -341,6 +354,7 @@ impl OwUnit {
             OwUnit::SturdyEdgeModule90 => "StEM (90°)",
             OwUnit::CustomDeg90 => "Custom 90° unit",
             OwUnit::Custom3468 => "60°, 90°, 120°, 135° unit",
+            OwUnit::Custom468 => "90°, 120°, 135° unit",
             OwUnit::CustomDeg108 => "Custom 108° unit",
             OwUnit::Deg120 => "Ow's 120° unit",
             OwUnit::Deg135 => "Ow's 135° unit",
@@ -439,18 +453,15 @@ impl Model {
 
     fn faces_to_render(&self, style: &FaceRenderStyle) -> Vec<(Color32, Vec<Vec3>)> {
         let mut faces_to_render = Vec::new();
-        for face in self.polyhedron.faces() {
+        for face in self.poly.faces() {
             // Decide how to render them, according to the style
             match style {
                 // For solid faces, render the face as a set of triangles
                 FaceRenderStyle::Solid => {
-                    let centroid = face.centroid(&self.polyhedron);
+                    let centroid = face.centroid(&self.poly);
                     for (v1, v2) in face.verts().iter().circular_tuple_windows() {
-                        let verts = vec![
-                            centroid,
-                            self.polyhedron.vert_pos(*v1),
-                            self.polyhedron.vert_pos(*v2),
-                        ];
+                        let verts =
+                            vec![centroid, self.poly.vert_pos(*v1), self.poly.vert_pos(*v2)];
                         let color = self.get_edge_side_color(*v2, *v1);
                         faces_to_render.push((color, verts));
                     }
@@ -475,8 +486,8 @@ impl Model {
         faces_to_render: &mut Vec<(Color32, Vec<Vec3>)>,
     ) {
         // Geometry calculations
-        let normal = face.normal(&self.polyhedron);
-        let vert_positions = face.vert_positions(&self.polyhedron);
+        let normal = face.normal(&self.poly);
+        let vert_positions = face.vert_positions(&self.poly);
         let in_directions = self.vertex_in_directions(&vert_positions);
 
         let verts_and_ins = face
@@ -586,7 +597,7 @@ impl Model {
     ) -> Instances {
         let mut colors = Vec::new();
         let mut transformations = Vec::new();
-        for edge in self.polyhedron.edges() {
+        for edge in self.poly.edges() {
             let is_highlighted = edges_to_highlight.contains(&edge.id());
             if !(show_wireframe || is_highlighted) {
                 continue;
@@ -599,8 +610,8 @@ impl Model {
             };
             colors.push(egui_color_to_srgba(color));
             transformations.push(edge_transform(
-                self.polyhedron.vert_pos(edge.bottom_vert),
-                self.polyhedron.vert_pos(edge.top_vert),
+                self.poly.vert_pos(edge.bottom_vert),
+                self.poly.vert_pos(edge.top_vert),
             ));
         }
 
@@ -632,7 +643,7 @@ impl Model {
     }
 
     fn vertex_instances(&self) -> Instances {
-        let verts = &self.polyhedron.verts();
+        let verts = &self.poly.verts();
         let color = egui_color_to_srgba(darken_color(self.default_color, WIREFRAME_TINT));
         Instances {
             transformations: verts
