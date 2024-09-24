@@ -248,6 +248,8 @@ fn property_label(ui: &mut egui::Ui, value: bool, label: &str) {
     ui.label(text);
 }
 
+/// Draws the model geometry breakdown, returning a set of edges which should be highlighted
+/// (these are the edges whose category is under the user's cursor).
 fn model_geom_gui(
     model: &Model,
     show_external_angles: &mut bool,
@@ -432,7 +434,7 @@ impl EdgeSubType {
         let mut left_vert = edge.bottom_vert;
         let mut right_vert = edge.top_vert;
         // Normalize face display order, so that the smaller face is always on the left
-        if face_cmp.is_lt() {
+        if face_cmp.is_gt() {
             std::mem::swap(&mut left_face, &mut right_face);
             std::mem::swap(&mut left_vert, &mut right_vert);
         }
