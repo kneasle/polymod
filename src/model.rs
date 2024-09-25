@@ -40,7 +40,7 @@ impl Model {
             poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
-            default_color: crate::colors::OVERLAY2,
+            default_color: crate::COLOR_THEME.overlay2,
             colors: ColorMap::new(),
         };
         model.fill_color_map();
@@ -128,9 +128,20 @@ impl Model {
             }
         }
         // Assign colors to these new color names
-        use crate::colors::*;
+        let theme = &catppuccin_egui::MOCHA;
         let colors = [
-            BLUE, RED, GREEN, MAUVE, PEACH, SKY, LAVENDER, YELLOW, SAPPHIRE, YELLOW, TEAL, MAROON,
+            theme.blue,
+            theme.red,
+            theme.green,
+            theme.mauve,
+            theme.peach,
+            theme.sky,
+            theme.lavender,
+            theme.yellow,
+            theme.sapphire,
+            theme.yellow,
+            theme.teal,
+            theme.maroon,
         ];
         let mut color_iter = colors.into_iter().cycle();
         for color_name in new_color_names {

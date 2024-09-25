@@ -16,7 +16,6 @@ use crate::{
 
 use model::{Model, OwUnitGeometry};
 
-mod colors;
 mod model;
 mod polyhedron;
 mod shapes;
@@ -25,6 +24,7 @@ mod viewport;
 
 const BIG_SPACE: f32 = 20.0;
 const SMALL_SPACE: f32 = 10.0;
+const COLOR_THEME: catppuccin_egui::Theme = catppuccin_egui::MOCHA;
 
 fn main() {
     // Test
@@ -64,6 +64,7 @@ fn main() {
             frame_input.device_pixel_ratio,
             |egui_context| {
                 use three_d::egui::*;
+                catppuccin_egui::set_theme(egui_context, COLOR_THEME);
                 // Left panel
                 let response =
                     SidePanel::left("left-panel")
@@ -127,9 +128,9 @@ fn main() {
         redraw |= view.update(&mut frame_input, viewport);
         if redraw {
             let screen = frame_input.screen();
-            screen.clear(utils::clear_state_for_egui_color(colors::BASE));
+            screen.clear(utils::clear_state_for_egui_color(COLOR_THEME.base));
             view.render(&models[current_model_idx], &edges_to_highlight, &screen);
-            screen.write(|| gui.render());
+            screen.write(|| gui.render()).unwrap();
         }
 
         FrameOutput {
