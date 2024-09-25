@@ -16,6 +16,7 @@ use crate::{
 
 use model::{Model, OwUnitGeometry};
 
+mod colors;
 mod model;
 mod polyhedron;
 mod shapes;
@@ -126,7 +127,7 @@ fn main() {
         redraw |= view.update(&mut frame_input, viewport);
         if redraw {
             let screen = frame_input.screen();
-            screen.clear(ClearState::color_and_depth(1.0, 1.0, 1.0, 1.0, 1.0));
+            screen.clear(utils::clear_state_for_egui_color(colors::BASE));
             view.render(&models[current_model_idx], &edges_to_highlight, &screen);
             screen.write(|| gui.render());
         }

@@ -1,4 +1,7 @@
-use std::{collections::HashSet, f32::consts::PI};
+use std::{
+    collections::{BTreeSet, HashSet},
+    f32::consts::PI,
+};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -37,7 +40,7 @@ impl Model {
             poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
-            default_color: Color32::GRAY,
+            default_color: crate::colors::OVERLAY2,
             colors: ColorMap::new(),
         };
         model.fill_color_map();
@@ -117,16 +120,22 @@ impl Model {
     /// Make sure that the map of colours has an entry for every color referenced in the
     /// [`Polyhedron`].
     pub fn fill_color_map(&mut self) {
-        const BLUE: Color32 = Color32::from_rgb(51, 90, 255);
-        const RED: Color32 = Color32::from_rgb(255, 51, 90);
-        const GREEN: Color32 = Color32::from_rgb(90, 255, 51);
-
-        let mut color_iter = [BLUE, RED, GREEN].into_iter().cycle();
+        // Determine which new colours we need, storing them in an ordered set
+        let mut new_color_names = BTreeSet::new();
         for color in self.poly.half_edge_colors().values() {
             if !self.colors.contains_key(color) {
-                self.colors
-                    .insert(color.to_owned(), color_iter.next().unwrap());
+                new_color_names.insert(color);
             }
+        }
+        // Assign colors to these new color names
+        use crate::colors::*;
+        let colors = [
+            BLUE, RED, GREEN, MAUVE, PEACH, SKY, LAVENDER, YELLOW, SAPPHIRE, YELLOW, TEAL, MAROON,
+        ];
+        let mut color_iter = colors.into_iter().cycle();
+        for color_name in new_color_names {
+            self.colors
+                .insert(color_name.to_owned(), color_iter.next().unwrap());
         }
     }
 
