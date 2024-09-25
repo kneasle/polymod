@@ -1,12 +1,13 @@
 #![allow(clippy::unnecessary_to_owned)]
 
 use itertools::Itertools;
-use three_d::{egui::Color32, Deg, Vec3};
+use three_d::{Deg, Vec3};
 
 use crate::{
     model::{Model, OwUnit},
     polyhedron::{Cube, EdgeId, FaceIdx, Polyhedron, PrismLike, Pyramid},
-    utils::Axis,
+    utils::{Axis, Side},
+    COLOR_THEME,
 };
 
 /// Create all the shapes created so far
@@ -23,45 +24,112 @@ pub fn all() -> Vec<Model> {
 
 pub fn add_origamis(all_models: &mut Vec<Model>) {
     let models = [
-        {
-            // Create a bicupola
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face,
-            } = Polyhedron::cupola(3);
-            let bottom_face = poly.extend_cupola(bottom_face, true);
-            let faces_to_add_pyramids = poly
-                .faces_enumerated()
-                .map(|(idx, _face)| idx)
-                .collect_vec();
-            // Dig tunnel, and color it blue
-            poly.color_edges_added_by("Tunnel", |poly| {
-                poly.excavate_antiprism(bottom_face);
-                poly.excavate_antiprism(top_face);
-            });
-            // Add pyramids to all faces in the bicupola which still exist
-            for face in faces_to_add_pyramids {
-                if poly.is_face(face) {
-                    poly.extend_pyramid(face);
-                }
-            }
-
-            // Make model
-            Model::new("Apanar Deltahedron".to_owned(), poly).with_ow_unit(OwUnit::Deg60, 3, 2)
-        },
-        {
-            let tri_pyramid = PrismExtensionSection::pyramid(3, Some("Triangles"));
-            let quad_pyramid = PrismExtensionSection::pyramid(4, Some("Squares"));
-            let poly = prism_extended_cuboctahedron(&tri_pyramid, &quad_pyramid);
-            Model::new("Christopher".to_owned(), poly).with_ow_unit(OwUnit::CustomDeg90, 3, 2)
-        },
-        Model::new("Robin".to_owned(), robin()).with_ow_unit(OwUnit::Custom468, 3, 2),
+        Model::new("Bi Cube", bi_cube()).with_ow_unit(OwUnit::CustomDeg90, 1, 1),
+        // Truncated tetrahedron
+        // Cuboctahedron
+        Model::new("Flying Saucer", flying_saucer())
+            .with_ow_unit(OwUnit::CustomDeg90, 3, 2)
+            .with_push(Side::Out, true)
+            .with_default_color(COLOR_THEME.green),
+        // Snub cube
+        Model::new("Terribly Torturous Tunnel", aplanar_deltahedron()).with_ow_unit(
+            OwUnit::Deg60,
+            3,
+            2,
+        ),
+        // Cuboctahedral rings
+        // Icosidodecahedral rings
+        // Octahedral rings
+        // Dodecahedron
+        // Tri prism
+        // Hex prism
+        // Oct prism
+        Model::new("Christopher", christopher()).with_ow_unit(OwUnit::CustomDeg90, 3, 2),
+        Model::new("Amethyst", q4_q4_slash_b4())
+            .with_ow_unit(OwUnit::Custom3468, 3, 2)
+            .with_default_color(COLOR_THEME.mauve),
+        // Torturous tunnel
+        Model::new("Chamfered RGB Cube", colored_great_rhombicuboctahedron())
+            .with_ow_unit(OwUnit::Ow68, 1, 1)
+            .with_default_color(crate::COLOR_THEME.surface0),
     ];
+
+    let ideas = [Model::new("Robin", robin()).with_ow_unit(OwUnit::Custom468, 3, 2)];
+
     for mut model in models {
         model.full_name = format!("Origami\\{}", model.full_name);
         all_models.push(model);
     }
+    for mut model in ideas {
+        model.full_name = format!("Origami\\Ideas\\{}", model.full_name);
+        all_models.push(model);
+    }
+}
+
+fn colored_great_rhombicuboctahedron() -> Polyhedron {
+    let mut poly = Polyhedron::great_rhombicuboctahedron();
+    let mut color_face = |normal: Vec3, color: &str| {
+        let face_idx = poly.get_face_with_normal(normal);
+        for (v1, v2) in poly
+            .get_face(face_idx)
+            .verts()
+            .to_vec()
+            .into_iter()
+            .circular_tuple_windows()
+        {
+            poly.set_full_edge_color(EdgeId::new(v1, v2), color);
+        }
+    };
+    color_face(Vec3::unit_x(), "X");
+    color_face(-Vec3::unit_x(), "X");
+    color_face(Vec3::unit_y(), "Y");
+    color_face(-Vec3::unit_y(), "Y");
+    color_face(Vec3::unit_z(), "Z");
+    color_face(-Vec3::unit_z(), "Z");
+    poly
+}
+
+fn christopher() -> Polyhedron {
+    let tri_pyramid = PrismExtensionSection::pyramid(3, Some("Triangles"));
+    let quad_pyramid = PrismExtensionSection::pyramid(4, Some("Squares"));
+    let poly = prism_extended_cuboctahedron(&tri_pyramid, &quad_pyramid);
+    poly
+}
+
+fn aplanar_deltahedron() -> Polyhedron {
+    // Create a bicupola
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::cupola(3);
+    let bottom_face = poly.extend_cupola(bottom_face, true);
+    let faces_to_add_pyramids = poly
+        .faces_enumerated()
+        .map(|(idx, _face)| idx)
+        .collect_vec();
+    // Dig tunnel, and color it blue
+    poly.color_edges_added_by("Tunnel", |poly| {
+        poly.excavate_antiprism(bottom_face);
+        poly.excavate_antiprism(top_face);
+    });
+    // Add pyramids to all faces in the bicupola which still exist
+    for face in faces_to_add_pyramids {
+        if poly.is_face(face) {
+            poly.extend_pyramid(face);
+        }
+    }
+    poly
+}
+
+fn bi_cube() -> Polyhedron {
+    let mut poly = Polyhedron::cube_poly();
+    for edge in poly.edges() {
+        let direction = poly.vert_pos(edge.top_vert) - poly.vert_pos(edge.bottom_vert);
+        let axis = Axis::exact_axis(direction).unwrap();
+        poly.set_full_edge_color(edge.id(), axis.name());
+    }
+    poly
 }
 
 fn robin() -> Polyhedron {
@@ -102,58 +170,6 @@ fn robin() -> Polyhedron {
         }
     }
     poly
-}
-
-fn misc_models() -> Vec<Model> {
-    let models = [
-        {
-            let mut poly = Polyhedron::great_rhombicuboctahedron();
-            let mut color_face = |normal: Vec3, color: &str| {
-                let face_idx = poly.get_face_with_normal(normal);
-                for (v1, v2) in poly
-                    .get_face(face_idx)
-                    .verts()
-                    .to_vec()
-                    .into_iter()
-                    .circular_tuple_windows()
-                {
-                    poly.set_full_edge_color(EdgeId::new(v1, v2), color);
-                }
-            };
-            color_face(Vec3::unit_x(), "X");
-            color_face(-Vec3::unit_x(), "X");
-            color_face(Vec3::unit_y(), "Y");
-            color_face(-Vec3::unit_y(), "Y");
-            color_face(Vec3::unit_z(), "Z");
-            color_face(-Vec3::unit_z(), "Z");
-            let mut model = Model::new("XYZ Great Rhobicuboctahedron (A)".to_owned(), poly);
-            model.view_geometry_settings.paper_ratio_w = 1;
-            model.view_geometry_settings.paper_ratio_h = 1;
-            model.view_geometry_settings.unit = OwUnit::Ow68;
-            model.default_color = Color32::from_rgb(54, 54, 54);
-            model
-        },
-        {
-            let mut poly = Polyhedron::great_rhombicuboctahedron();
-            let mut color_face = |normal: Vec3, color: &str| {
-                let face_idx = poly.get_face_with_normal(normal);
-                poly.color_face(face_idx, color);
-            };
-            color_face(Vec3::unit_x(), "X");
-            color_face(-Vec3::unit_x(), "X");
-            color_face(Vec3::unit_y(), "Y");
-            color_face(-Vec3::unit_y(), "Y");
-            color_face(Vec3::unit_z(), "Z");
-            color_face(-Vec3::unit_z(), "Z");
-            let mut model = Model::new("XYZ Great Rhobicuboctahedron (B)".to_owned(), poly);
-            model.view_geometry_settings.paper_ratio_w = 1;
-            model.view_geometry_settings.paper_ratio_h = 1;
-            model.view_geometry_settings.unit = OwUnit::Ow68;
-            model.default_color = Color32::from_rgb(54, 54, 54);
-            model
-        },
-    ];
-    models.to_vec()
 }
 
 #[derive(Debug, Clone)]
@@ -319,10 +335,6 @@ pub fn add_shapes(all_models: &mut Vec<Model>) {
         model.full_name = full_builtin_name("Toroids", &model.full_name);
         all_models.push(model);
     }
-    for mut model in misc_models() {
-        model.full_name = full_builtin_name("Misc", &model.full_name);
-        all_models.push(model);
-    }
 }
 
 fn toroids() -> Vec<Model> {
@@ -341,21 +353,8 @@ fn toroids() -> Vec<Model> {
     };
 
     let toroids = [
-        Model::new("Flying saucer".to_owned(), {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face,
-            } = Polyhedron::cupola(5);
-            poly.extend_cupola(bottom_face, true);
-            poly.transform_verts(|mut v| {
-                v.y = f32::round(v.y * 2.0) / 2.0;
-                v
-            });
-            poly.excavate_prism(top_face);
-            poly
-        }),
-        Model::new("Cake pan".to_owned(), {
+        Model::new("Flying saucer", flying_saucer()),
+        Model::new("Cake pan", {
             let PrismLike {
                 mut poly,
                 bottom_face,
@@ -366,7 +365,7 @@ fn toroids() -> Vec<Model> {
             poly.excavate_prism(next);
             poly
         }),
-        Model::new("Cakier pan".to_owned(), {
+        Model::new("Cakier pan", {
             let PrismLike {
                 mut poly,
                 bottom_face,
@@ -377,7 +376,7 @@ fn toroids() -> Vec<Model> {
             poly.excavate_prism(next);
             poly
         }),
-        Model::new("Cakiest pan".to_owned(), {
+        Model::new("Cakiest pan", {
             let PrismLike {
                 mut poly,
                 bottom_face,
@@ -388,7 +387,7 @@ fn toroids() -> Vec<Model> {
             poly.excavate_prism(next);
             poly
         }),
-        Model::new("Torturous Tunnel".to_owned(), {
+        Model::new("Torturous Tunnel", {
             let PrismLike {
                 mut poly,
                 bottom_face,
@@ -399,7 +398,7 @@ fn toroids() -> Vec<Model> {
             poly.excavate_antiprism(top_face);
             poly
         }),
-        Model::new("Oriental Hat".to_owned(), {
+        Model::new("Oriental Hat", {
             let PrismLike {
                 mut poly,
                 bottom_face,
@@ -417,7 +416,7 @@ fn toroids() -> Vec<Model> {
                 let next = poly.excavate_prism(next);
                 poly.excavate_cupola(next, false);
             });
-            Model::new("Bob".to_owned(), poly)
+            Model::new("Bob", poly)
         },
         {
             let mut poly = Polyhedron::truncated_cube();
@@ -428,7 +427,7 @@ fn toroids() -> Vec<Model> {
                 poly.excavate_cupola(next, false);
             });
 
-            Model::new("Gyrated Bob".to_owned(), poly)
+            Model::new("Gyrated Bob", poly)
         },
         {
             let mut poly = Polyhedron::truncated_cube();
@@ -444,20 +443,11 @@ fn toroids() -> Vec<Model> {
                 poly.excavate_cuboctahedron(next);
             });
 
-            Model::new("Dumbell".to_owned(), poly)
+            Model::new("Dumbell", poly)
         },
-        Model::new("Q_3 P_6 Q_3 / P_6".to_owned(), qpq_slash_p(false)),
-        Model::new("Q_3 P_6 gQ_3 / P_6".to_owned(), qpq_slash_p(true)),
-        Model::new("Q_4^2 / B_4".to_owned(), {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face,
-            } = Polyhedron::cupola(4);
-            poly.extend_cupola(bottom_face, true);
-            poly.excavate_cuboctahedron(top_face);
-            poly
-        }),
+        Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
+        Model::new("Q_3 P_6 gQ_3 / P_6", qpq_slash_p(true)),
+        Model::new("Q_4^2 / B_4", q4_q4_slash_b4()),
         {
             let mut poly = Polyhedron::truncated_octahedron();
             // Excavate cupolas (TODO: Do this by symmetry)
@@ -471,9 +461,9 @@ fn toroids() -> Vec<Model> {
             poly.color_faces_added_by("Centre", |poly| {
                 poly.excavate_antiprism(inner_face);
             });
-            Model::new("K_3 / 3Q_3 (S_3)".to_owned(), poly)
+            Model::new("K_3 / 3Q_3 (S_3)", poly)
         },
-        Model::new("K_4 (tunnel octagons)".to_owned(), {
+        Model::new("K_4 (tunnel octagons)", {
             let mut poly = Polyhedron::great_rhombicuboctahedron();
             let mut inner_face = FaceIdx::new(0);
             for octagon in poly.ngons(8) {
@@ -485,7 +475,7 @@ fn toroids() -> Vec<Model> {
             });
             poly
         }),
-        Model::new("K_4 (tunnel hexagons)".to_owned(), {
+        Model::new("K_4 (tunnel hexagons)", {
             let mut poly = Polyhedron::great_rhombicuboctahedron();
             let mut inner_face = FaceIdx::new(0);
             for hexagon in poly.ngons(6) {
@@ -497,7 +487,7 @@ fn toroids() -> Vec<Model> {
             });
             poly
         }),
-        Model::new("K_4 (tunnel cubes)".to_owned(), {
+        Model::new("K_4 (tunnel cubes)", {
             let mut poly = Polyhedron::great_rhombicuboctahedron();
             let mut inner_face = FaceIdx::new(0);
             for square in poly.ngons(4) {
@@ -529,9 +519,9 @@ fn toroids() -> Vec<Model> {
                 }
             }
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-            Model::new("K_5 (cupola/antiprism)".to_owned(), poly)
+            Model::new("K_5 (cupola/antiprism)", poly)
         },
-        Model::new("K_5 (rotunda)".to_owned(), {
+        Model::new("K_5 (rotunda)", {
             let mut poly = Polyhedron::great_rhombicosidodecahedron();
             let mut inner_face = FaceIdx::new(0);
             for decagon in poly.ngons(10) {
@@ -541,7 +531,7 @@ fn toroids() -> Vec<Model> {
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
             poly
         }),
-        Model::new("Stephanie".to_owned(), {
+        Model::new("Stephanie", {
             // Start with a colored truncated dodecahedron
             let mut poly = Polyhedron::truncated_dodecahedron();
             // Excavate using cupolae and antiprisms to form the tunnels
@@ -570,7 +560,7 @@ fn toroids() -> Vec<Model> {
             inner.color_all_edges("Inner");
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
 
-            Model::new("Stephanie (Coloring A)".to_owned(), poly)
+            Model::new("Stephanie (Coloring A)", poly)
         },
         {
             // Start with a colored truncated dodecahedron
@@ -588,7 +578,7 @@ fn toroids() -> Vec<Model> {
             let inner = Polyhedron::dodecahedron();
             poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
 
-            Model::new("Stephanie (Coloring B)".to_owned(), poly)
+            Model::new("Stephanie (Coloring B)", poly)
         },
         {
             let mut poly = Polyhedron::truncated_icosahedron();
@@ -596,13 +586,39 @@ fn toroids() -> Vec<Model> {
                 poly.color_face(face, "Pentagons");
             }
 
-            Model::new("Football".to_owned(), poly)
+            Model::new("Football", poly)
         },
-        Model::new("Cube Box (Color A)".to_owned(), cube_box_col_a(false)),
-        Model::new("Cube Box (Color B)".to_owned(), cube_box_col_a(true)),
+        Model::new("Cube Box (Color A)", cube_box_col_a(false)),
+        Model::new("Cube Box (Color B)", cube_box_col_a(true)),
     ];
 
     toroids.to_vec()
+}
+
+fn q4_q4_slash_b4() -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::cupola(4);
+    poly.extend_cupola(bottom_face, true);
+    poly.excavate_cuboctahedron(top_face);
+    poly
+}
+
+fn flying_saucer() -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::cupola(5);
+    poly.extend_cupola(bottom_face, true);
+    poly.transform_verts(|mut v| {
+        v.y = f32::round(v.y * 2.0) / 2.0;
+        v
+    });
+    poly.excavate_prism(top_face);
+    poly
 }
 
 fn cube_box_col_a(use_concave_color: bool) -> Polyhedron {

@@ -34,9 +34,9 @@ pub struct Model {
 pub type ColorMap = IndexMap<String, Color32>;
 
 impl Model {
-    pub fn new(full_name: String, poly: Polyhedron) -> Self {
+    pub fn new(full_name: impl Into<String>, poly: Polyhedron) -> Self {
         let mut model = Self {
-            full_name,
+            full_name: full_name.into(),
             poly,
 
             view_geometry_settings: ViewGeomSettings::default(),
@@ -59,6 +59,17 @@ impl Model {
         self.view_geometry_settings.paper_ratio_h = paper_ratio_h;
         self.view_geometry_settings.wireframe_edges = false;
         self.view_geometry_settings.wireframe_verts = false;
+        self
+    }
+
+    pub fn with_default_color(mut self, default_color: Color32) -> Self {
+        self.default_color = default_color;
+        self
+    }
+
+    pub fn with_push(mut self, direction: Side, crinkle: bool) -> Model {
+        self.view_geometry_settings.push_direction = direction;
+        self.view_geometry_settings.add_crinkle = crinkle;
         self
     }
 
@@ -183,7 +194,7 @@ pub struct ViewGeomSettings {
     pub paper_ratio_w: usize,
     pub paper_ratio_h: usize,
     pub unit: OwUnit,
-    pub direction: Side,
+    pub push_direction: Side,
     pub add_crinkle: bool,
     // Wireframe
     pub wireframe_edges: bool,
@@ -207,7 +218,7 @@ impl Default for ViewGeomSettings {
             paper_ratio_w: 3,
             paper_ratio_h: 2,
             unit: OwUnit::Custom3468,
-            direction: Side::In,
+            push_direction: Side::In,
             add_crinkle: false,
 
             wireframe_edges: true,
@@ -238,7 +249,7 @@ impl ViewGeomSettings {
                     side_ratio: unit_width / spine_length,
                     non_flat: Some(NonFlat {
                         supported_angles,
-                        push_direction: self.direction,
+                        push_direction: self.push_direction,
                         add_crinkle: self.add_crinkle,
                     }),
                 }
@@ -292,8 +303,8 @@ impl ViewGeomSettings {
                 ui.label("paper.");
             });
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.direction, Side::In, "Push in");
-                ui.selectable_value(&mut self.direction, Side::Out, "Push out");
+                ui.selectable_value(&mut self.push_direction, Side::In, "Push in");
+                ui.selectable_value(&mut self.push_direction, Side::Out, "Push out");
             });
             ui.checkbox(&mut self.add_crinkle, "Crinkle");
         });

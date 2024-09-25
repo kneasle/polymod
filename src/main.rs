@@ -64,6 +64,7 @@ fn main() {
             frame_input.device_pixel_ratio,
             |egui_context| {
                 use three_d::egui::*;
+                // Set colors
                 catppuccin_egui::set_theme(egui_context, COLOR_THEME);
                 // Left panel
                 let response =
