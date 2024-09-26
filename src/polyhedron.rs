@@ -1100,6 +1100,14 @@ impl Polyhedron {
         }
     }
 
+    /// Set the color of both sides of the edges around the given `face`.
+    pub fn color_all_edges_of_face(&mut self, face: FaceIdx, color_name: &str) {
+        let verts = self.get_face(face).verts.clone();
+        for (v1, v2) in verts.into_iter().circular_tuple_windows() {
+            self.set_full_edge_color(EdgeId::new(v1, v2), color_name);
+        }
+    }
+
     /// Give both sides of every edge of this model the given `color`
     pub fn color_all_edges(&mut self, color_name: &str) {
         for edge in self.edges() {

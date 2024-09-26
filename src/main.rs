@@ -85,12 +85,6 @@ fn main() {
                         .show(egui_context, |ui| {
                             ScrollArea::vertical().show(ui, |ui| {
                                 let model = &mut models[current_model_idx];
-                                ui.heading("General Model Settings");
-                                ui.horizontal(|ui| {
-                                    ui.label("Name:");
-                                    ui.text_edit_singleline(&mut model.full_name);
-                                });
-                                ui.add_space(SMALL_SPACE);
                                 ui.heading("View");
                                 model.draw_view_geom_gui(ui);
                                 ui.add_space(BIG_SPACE);

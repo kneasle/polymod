@@ -5,7 +5,7 @@ use three_d::{Deg, Vec3};
 
 use crate::{
     model::{Model, OwUnit},
-    polyhedron::{Cube, EdgeId, FaceIdx, Polyhedron, PrismLike, Pyramid},
+    polyhedron::{Cube, FaceIdx, Polyhedron, PrismLike, Pyramid},
     utils::{Axis, Side},
     COLOR_THEME,
 };
@@ -186,15 +186,7 @@ fn colored_great_rhombicuboctahedron() -> Polyhedron {
     let mut poly = Polyhedron::great_rhombicuboctahedron();
     let mut color_face = |normal: Vec3, color: &str| {
         let face_idx = poly.get_face_with_normal(normal);
-        for (v1, v2) in poly
-            .get_face(face_idx)
-            .verts()
-            .to_vec()
-            .into_iter()
-            .circular_tuple_windows()
-        {
-            poly.set_full_edge_color(EdgeId::new(v1, v2), color);
-        }
+        poly.color_all_edges_of_face(face_idx, color);
     };
     color_face(Vec3::unit_x(), "X");
     color_face(-Vec3::unit_x(), "X");
