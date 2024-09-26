@@ -10,6 +10,10 @@ use crate::{
     COLOR_THEME,
 };
 
+//////////////////
+// MODEL GROUPS //
+//////////////////
+
 /// Create all the shapes created so far
 pub fn all() -> Vec<Model> {
     let mut all_models = Vec::new();
@@ -17,10 +21,6 @@ pub fn all() -> Vec<Model> {
     add_shapes(&mut all_models);
     all_models
 }
-
-////////////////////
-// ORIGAMI MODELS //
-////////////////////
 
 pub fn add_origamis(all_models: &mut Vec<Model>) {
     let models = [
@@ -65,195 +65,6 @@ pub fn add_origamis(all_models: &mut Vec<Model>) {
         all_models.push(model);
     }
 }
-
-fn colored_great_rhombicuboctahedron() -> Polyhedron {
-    let mut poly = Polyhedron::great_rhombicuboctahedron();
-    let mut color_face = |normal: Vec3, color: &str| {
-        let face_idx = poly.get_face_with_normal(normal);
-        for (v1, v2) in poly
-            .get_face(face_idx)
-            .verts()
-            .to_vec()
-            .into_iter()
-            .circular_tuple_windows()
-        {
-            poly.set_full_edge_color(EdgeId::new(v1, v2), color);
-        }
-    };
-    color_face(Vec3::unit_x(), "X");
-    color_face(-Vec3::unit_x(), "X");
-    color_face(Vec3::unit_y(), "Y");
-    color_face(-Vec3::unit_y(), "Y");
-    color_face(Vec3::unit_z(), "Z");
-    color_face(-Vec3::unit_z(), "Z");
-    poly
-}
-
-fn christopher() -> Polyhedron {
-    let tri_pyramid = PrismExtensionSection::pyramid(3, Some("Triangles"));
-    let quad_pyramid = PrismExtensionSection::pyramid(4, Some("Squares"));
-    let poly = prism_extended_cuboctahedron(&tri_pyramid, &quad_pyramid);
-    poly
-}
-
-fn aplanar_deltahedron() -> Polyhedron {
-    // Create a bicupola
-    let PrismLike {
-        mut poly,
-        bottom_face,
-        top_face,
-    } = Polyhedron::cupola(3);
-    let bottom_face = poly.extend_cupola(bottom_face, true);
-    let faces_to_add_pyramids = poly
-        .faces_enumerated()
-        .map(|(idx, _face)| idx)
-        .collect_vec();
-    // Dig tunnel, and color it blue
-    poly.color_edges_added_by("Tunnel", |poly| {
-        poly.excavate_antiprism(bottom_face);
-        poly.excavate_antiprism(top_face);
-    });
-    // Add pyramids to all faces in the bicupola which still exist
-    for face in faces_to_add_pyramids {
-        if poly.is_face(face) {
-            poly.extend_pyramid(face);
-        }
-    }
-    poly
-}
-
-fn bi_cube() -> Polyhedron {
-    let mut poly = Polyhedron::cube_poly();
-    for edge in poly.edges() {
-        let direction = poly.vert_pos(edge.top_vert) - poly.vert_pos(edge.bottom_vert);
-        let axis = Axis::exact_axis(direction).unwrap();
-        poly.set_full_edge_color(edge.id(), axis.name());
-    }
-    poly
-}
-
-fn robin() -> Polyhedron {
-    // Create a `PrismExtensionSection` for a cupola
-    const COLOR_NAME: &str = "Cupolae";
-    let mut cupola = Polyhedron::cupola_with_top(4).poly;
-    cupola.color_all_edges(COLOR_NAME);
-    let cupola_section = PrismExtensionSection {
-        side_faces: cupola.ngons(3),
-        poly: cupola,
-    };
-    // Combine it with triangular prisms to build the model
-    let tri_pyramid = PrismExtensionSection::pyramid(3, None);
-    let mut poly = prism_extended_cuboctahedron(&cupola_section, &tri_pyramid);
-    // Add extra colours along the prisms
-    for e in poly.edges() {
-        let is_about_60_degrees = e
-            .dihedral_angle()
-            .is_some_and(|Deg(a)| (a - 60.0).abs() < 0.001);
-        if is_about_60_degrees {
-            poly.set_full_edge_color(e.id(), COLOR_NAME);
-        }
-    }
-    // Redo colouring by axis
-    for face_idx in poly.face_indices() {
-        if poly.face_order(face_idx) == 3 {
-            // Colour each edge of the triangle differently
-            let edges_round_face = poly.get_face(face_idx).verts().to_vec();
-            for (v1, v2) in edges_round_face.into_iter().circular_tuple_windows() {
-                let midpoint = (poly.vert_pos(v1) + poly.vert_pos(v2)) / 2.0;
-                let nearest_axis_name = Axis::nearest_to(midpoint).name();
-                poly.set_half_edge_color(v2, v1, nearest_axis_name);
-            }
-        } else {
-            // Color each other face by its nearest axis
-            let nearest_axis = Axis::nearest_to(poly.face_centroid(face_idx));
-            poly.color_face(face_idx, nearest_axis.name());
-        }
-    }
-    poly
-}
-
-#[derive(Debug, Clone)]
-struct PrismExtensionSection {
-    poly: Polyhedron,
-    side_faces: Vec<FaceIdx>,
-}
-
-impl PrismExtensionSection {
-    fn pyramid(n: usize, color_name: Option<&str>) -> Self {
-        let Pyramid {
-            mut poly,
-            base_face,
-        } = Polyhedron::pyramid(n);
-        // Color the base face
-        if let Some(color_name) = color_name {
-            let verts = &poly.get_face(base_face).verts().to_vec();
-            for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
-                poly.set_half_edge_color(v2, v1, color_name);
-            }
-        }
-        // Get the side faces
-        let side_faces = poly
-            .faces_enumerated()
-            .map(|(id, _)| id)
-            .filter(|id| *id != base_face)
-            .collect_vec();
-        Self { poly, side_faces }
-    }
-}
-
-fn prism_extended_cuboctahedron(
-    section_a: &PrismExtensionSection,
-    section_b: &PrismExtensionSection,
-) -> Polyhedron {
-    /// Which section should be created on the other end of a pyramid
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum SectionType {
-        A,
-        B,
-    }
-
-    // Recursively build the polyhedron
-    let mut poly = section_a.poly.clone();
-    let mut faces_to_expand = section_a
-        .side_faces
-        .iter()
-        .map(|idx| (*idx, SectionType::B)) // The other sides will all be Bs
-        .collect_vec();
-    while let Some((face_to_extend, next_section_type)) = faces_to_expand.pop() {
-        let (next_section, other_section_type) = match next_section_type {
-            SectionType::A => (&section_a, SectionType::B),
-            SectionType::B => (&section_b, SectionType::A),
-        };
-
-        // Add prism and pyramid
-        if !poly.is_face(face_to_extend) {
-            continue; // Face has already been connected from the other side
-        }
-        let opposite_face = poly.extend_prism(face_to_extend);
-        if !poly.is_face(opposite_face) {
-            continue; // Connecting to a section which already exists
-        }
-        let face_mapping = poly.extend(
-            opposite_face,
-            &next_section.poly,
-            next_section.side_faces[0],
-            0,
-        );
-
-        // Add new faces to extend
-        for &source_side_face in &next_section.side_faces {
-            faces_to_expand.push((face_mapping[source_side_face], other_section_type));
-        }
-    }
-
-    // Centre the polyhedron and return it
-    poly.make_centred();
-    poly
-}
-
-////////////
-// SHAPES //
-////////////
 
 pub fn add_shapes(all_models: &mut Vec<Model>) {
     let platonic = [
@@ -367,6 +178,198 @@ fn toroids() -> Vec<Model> {
     toroids.to_vec()
 }
 
+/////////////////////////////
+// MODEL CONSTRUCTION CODE //
+/////////////////////////////
+
+fn colored_great_rhombicuboctahedron() -> Polyhedron {
+    let mut poly = Polyhedron::great_rhombicuboctahedron();
+    let mut color_face = |normal: Vec3, color: &str| {
+        let face_idx = poly.get_face_with_normal(normal);
+        for (v1, v2) in poly
+            .get_face(face_idx)
+            .verts()
+            .to_vec()
+            .into_iter()
+            .circular_tuple_windows()
+        {
+            poly.set_full_edge_color(EdgeId::new(v1, v2), color);
+        }
+    };
+    color_face(Vec3::unit_x(), "X");
+    color_face(-Vec3::unit_x(), "X");
+    color_face(Vec3::unit_y(), "Y");
+    color_face(-Vec3::unit_y(), "Y");
+    color_face(Vec3::unit_z(), "Z");
+    color_face(-Vec3::unit_z(), "Z");
+    poly
+}
+
+fn christopher() -> Polyhedron {
+    let tri_pyramid = PrismExtensionSection::pyramid(3, Some("Triangles"));
+    let quad_pyramid = PrismExtensionSection::pyramid(4, Some("Squares"));
+    prism_extend(&tri_pyramid, &quad_pyramid)
+}
+
+fn aplanar_deltahedron() -> Polyhedron {
+    // Create a bicupola
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::cupola(3);
+    let bottom_face = poly.extend_cupola(bottom_face, true);
+    let faces_to_add_pyramids = poly
+        .faces_enumerated()
+        .map(|(idx, _face)| idx)
+        .collect_vec();
+    // Dig tunnel, and color it blue
+    poly.color_edges_added_by("Tunnel", |poly| {
+        poly.excavate_antiprism(bottom_face);
+        poly.excavate_antiprism(top_face);
+    });
+    // Add pyramids to all faces in the bicupola which still exist
+    for face in faces_to_add_pyramids {
+        if poly.is_face(face) {
+            poly.extend_pyramid(face);
+        }
+    }
+    poly
+}
+
+fn bi_cube() -> Polyhedron {
+    let mut poly = Polyhedron::cube_poly();
+    for edge in poly.edges() {
+        let direction = poly.vert_pos(edge.top_vert) - poly.vert_pos(edge.bottom_vert);
+        let axis = Axis::exact_axis(direction).unwrap();
+        poly.set_full_edge_color(edge.id(), axis.name());
+    }
+    poly
+}
+
+fn robin() -> Polyhedron {
+    // Create a `PrismExtensionSection` for a cupola
+    const COLOR_NAME: &str = "Cupolae";
+    let mut cupola = Polyhedron::cupola_with_top(4).poly;
+    cupola.color_all_edges(COLOR_NAME);
+    let cupola_section = PrismExtensionSection {
+        side_faces: cupola.ngons(3),
+        poly: cupola,
+    };
+    // Combine it with triangular prisms to build the model
+    let tri_pyramid = PrismExtensionSection::pyramid(3, None);
+    let mut poly = prism_extend(&cupola_section, &tri_pyramid);
+    // Add extra colours along the prisms
+    for e in poly.edges() {
+        let is_about_60_degrees = e
+            .dihedral_angle()
+            .is_some_and(|Deg(a)| (a - 60.0).abs() < 0.001);
+        if is_about_60_degrees {
+            poly.set_full_edge_color(e.id(), COLOR_NAME);
+        }
+    }
+    // Redo colouring by axis
+    for face_idx in poly.face_indices() {
+        if poly.face_order(face_idx) == 3 {
+            // Colour each edge of the triangle differently
+            let edges_round_face = poly.get_face(face_idx).verts().to_vec();
+            for (v1, v2) in edges_round_face.into_iter().circular_tuple_windows() {
+                let midpoint = (poly.vert_pos(v1) + poly.vert_pos(v2)) / 2.0;
+                let nearest_axis_name = Axis::nearest_to(midpoint).name();
+                poly.set_half_edge_color(v2, v1, nearest_axis_name);
+            }
+        } else {
+            // Color each other face by its nearest axis
+            let nearest_axis = Axis::nearest_to(poly.face_centroid(face_idx));
+            poly.color_face(face_idx, nearest_axis.name());
+        }
+    }
+    poly
+}
+
+#[derive(Debug, Clone)]
+struct PrismExtensionSection {
+    poly: Polyhedron,
+    side_faces: Vec<FaceIdx>,
+}
+
+impl PrismExtensionSection {
+    fn pyramid(n: usize, color_name: Option<&str>) -> Self {
+        let Pyramid {
+            mut poly,
+            base_face,
+        } = Polyhedron::pyramid(n);
+        // Color the base face
+        if let Some(color_name) = color_name {
+            let verts = &poly.get_face(base_face).verts().to_vec();
+            for (v1, v2) in verts.iter().copied().circular_tuple_windows() {
+                poly.set_half_edge_color(v2, v1, color_name);
+            }
+        }
+        // Get the side faces
+        let side_faces = poly
+            .faces_enumerated()
+            .map(|(id, _)| id)
+            .filter(|id| *id != base_face)
+            .collect_vec();
+        Self { poly, side_faces }
+    }
+}
+
+fn prism_extend(
+    section_a: &PrismExtensionSection,
+    section_b: &PrismExtensionSection,
+) -> Polyhedron {
+    /// Which section should be created on the other end of a pyramid
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum SectionType {
+        A,
+        B,
+    }
+
+    // Recursively build the polyhedron
+    let mut poly = section_a.poly.clone();
+    let mut faces_to_expand = section_a
+        .side_faces
+        .iter()
+        .map(|idx| (*idx, SectionType::B)) // The other sides will all be Bs
+        .collect_vec();
+    while let Some((face_to_extend, next_section_type)) = faces_to_expand.pop() {
+        let (next_section, other_section_type) = match next_section_type {
+            SectionType::A => (&section_a, SectionType::B),
+            SectionType::B => (&section_b, SectionType::A),
+        };
+
+        // Add prism and pyramid
+        if !poly.is_face(face_to_extend) {
+            continue; // Face has already been connected from the other side
+        }
+        let opposite_face = poly.extend_prism(face_to_extend);
+        if !poly.is_face(opposite_face) {
+            continue; // Connecting to a section which already exists
+        }
+        let face_mapping = poly.extend(
+            opposite_face,
+            &next_section.poly,
+            next_section.side_faces[0],
+            0,
+        );
+
+        // Add new faces to extend
+        for &source_side_face in &next_section.side_faces {
+            faces_to_expand.push((face_mapping[source_side_face], other_section_type));
+        }
+    }
+
+    // Centre the polyhedron and return it
+    poly.make_centred();
+    poly
+}
+
+////////////
+// SHAPES //
+////////////
+
 fn flying_saucer() -> Polyhedron {
     let PrismLike {
         mut poly,
@@ -389,7 +392,7 @@ fn cake_pan(n: usize) -> Polyhedron {
         top_face: _,
     } = Polyhedron::cupola(n);
     let next = poly.extend_prism(bottom_face);
-    let next = poly.excavate_cupola(next, true);
+    let next = poly.excavate_cupola(next, false);
     poly.excavate_prism(next);
     poly
 }
