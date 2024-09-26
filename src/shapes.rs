@@ -338,272 +338,33 @@ pub fn add_shapes(all_models: &mut Vec<Model>) {
 }
 
 fn toroids() -> Vec<Model> {
-    let qpq_slash_p = |gyro: bool| -> Polyhedron {
-        let PrismLike {
-            mut poly,
-            bottom_face,
-            top_face,
-        } = Polyhedron::prism(6);
-        let face_to_excavate = poly.get_ngon(4);
-        poly.extend_cupola(bottom_face, false);
-        poly.extend_cupola(top_face, gyro);
-        let tunnel = Polyhedron::prism(6).poly;
-        poly.excavate(face_to_excavate, &tunnel, tunnel.get_ngon(4), 1);
-        poly
-    };
-
     let toroids = [
         Model::new("Flying saucer", flying_saucer()),
-        Model::new("Cake pan", {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face: _,
-            } = Polyhedron::cupola(3);
-            let next = poly.extend_prism(bottom_face);
-            let next = poly.excavate_cupola(next, true);
-            poly.excavate_prism(next);
-            poly
-        }),
-        Model::new("Cakier pan", {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face: _,
-            } = Polyhedron::cupola(4);
-            let next = poly.extend_prism(bottom_face);
-            let next = poly.excavate_cupola(next, true);
-            poly.excavate_prism(next);
-            poly
-        }),
-        Model::new("Cakiest pan", {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face: _,
-            } = Polyhedron::cupola(5);
-            let next = poly.extend_prism(bottom_face);
-            let next = poly.excavate_cupola(next, true);
-            poly.excavate_prism(next);
-            poly
-        }),
-        Model::new("Torturous Tunnel", {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face,
-            } = Polyhedron::cupola(3);
-            let bottom_face = poly.extend_cupola(bottom_face, true);
-            poly.excavate_antiprism(bottom_face);
-            poly.excavate_antiprism(top_face);
-            poly
-        }),
-        Model::new("Oriental Hat", {
-            let PrismLike {
-                mut poly,
-                bottom_face,
-                top_face: _,
-            } = Polyhedron::rotunda();
-            let bottom_face = poly.excavate_cupola(bottom_face, false);
-            poly.excavate_antiprism(bottom_face);
-            poly
-        }),
-        {
-            let mut poly = Polyhedron::truncated_cube();
-            let face = poly.get_face_with_normal(Vec3::unit_x());
-            poly.color_faces_added_by("Tunnel", |poly| {
-                let next = poly.excavate_cupola(face, true);
-                let next = poly.excavate_prism(next);
-                poly.excavate_cupola(next, false);
-            });
-            Model::new("Bob", poly)
-        },
-        {
-            let mut poly = Polyhedron::truncated_cube();
-            let face = poly.get_face_with_normal(Vec3::unit_x());
-            poly.color_faces_added_by("Tunnel", |poly| {
-                let next = poly.excavate_cupola(face, false);
-                let next = poly.excavate_prism(next);
-                poly.excavate_cupola(next, false);
-            });
-
-            Model::new("Gyrated Bob", poly)
-        },
-        {
-            let mut poly = Polyhedron::truncated_cube();
-            // Extend +x and -x faces with cupolae
-            let face = poly.get_face_with_normal(Vec3::unit_x());
-            let back_face = poly.get_face_with_normal(-Vec3::unit_x());
-            poly.extend_cupola(back_face, true);
-            let next = poly.extend_cupola(face, true);
-            // Tunnel with B_4 (P_4) B_4
-            poly.color_faces_added_by("Tunnel", |poly| {
-                let next = poly.excavate_cuboctahedron(next);
-                let next = poly.excavate_prism(next);
-                poly.excavate_cuboctahedron(next);
-            });
-
-            Model::new("Dumbell", poly)
-        },
+        Model::new("Cake pan", cake_pan(3)),
+        Model::new("Cakier pan", cake_pan(4)),
+        Model::new("Cakiest pan", cake_pan(5)),
+        Model::new("Torturous Tunnel", torturous_tunnel()),
+        Model::new("Oriental Hat", oriental_hat()),
+        Model::new("Bob", bob(false)),
+        Model::new("Gyrated Bob", bob(true)),
+        Model::new("Dumbell", dumbell()),
         Model::new("Q_3 P_6 Q_3 / P_6", qpq_slash_p(false)),
         Model::new("Q_3 P_6 gQ_3 / P_6", qpq_slash_p(true)),
         Model::new("Q_4^2 / B_4", q4_q4_slash_b4()),
-        {
-            let mut poly = Polyhedron::truncated_octahedron();
-            // Excavate cupolas (TODO: Do this by symmetry)
-            let mut inner_face = FaceIdx::new(0);
-            poly.color_faces_added_by("Tunnels", |poly| {
-                for face_idx in [0, 2, 4, 6] {
-                    inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
-                }
-            });
-            // Excavate central octahedron
-            poly.color_faces_added_by("Centre", |poly| {
-                poly.excavate_antiprism(inner_face);
-            });
-            Model::new("K_3 / 3Q_3 (S_3)", poly)
-        },
-        Model::new("K_4 (tunnel octagons)", {
-            let mut poly = Polyhedron::great_rhombicuboctahedron();
-            let mut inner_face = FaceIdx::new(0);
-            for octagon in poly.ngons(8) {
-                inner_face = poly.excavate_cupola(octagon, false);
-            }
-            let inner = Polyhedron::rhombicuboctahedron();
-            poly.color_faces_added_by("Inner", |poly| {
-                poly.excavate(inner_face, &inner, inner.get_ngon(4), 0);
-            });
-            poly
-        }),
-        Model::new("K_4 (tunnel hexagons)", {
-            let mut poly = Polyhedron::great_rhombicuboctahedron();
-            let mut inner_face = FaceIdx::new(0);
-            for hexagon in poly.ngons(6) {
-                inner_face = poly.excavate_cupola(hexagon, true);
-            }
-            let inner = Polyhedron::rhombicuboctahedron();
-            poly.color_faces_added_by("Inner", |poly| {
-                poly.excavate(inner_face, &inner, inner.get_ngon(3), 0);
-            });
-            poly
-        }),
-        Model::new("K_4 (tunnel cubes)", {
-            let mut poly = Polyhedron::great_rhombicuboctahedron();
-            let mut inner_face = FaceIdx::new(0);
-            for square in poly.ngons(4) {
-                inner_face = poly.excavate_prism(square);
-            }
-            let inner = Polyhedron::rhombicuboctahedron();
-            let face = *inner.ngons(4).last().unwrap();
-            poly.color_faces_added_by("Inner", |poly| {
-                poly.excavate(inner_face, &inner, face, 0);
-            });
-            poly
-        }),
-        {
-            let mut poly = Polyhedron::great_rhombicosidodecahedron();
-            for face_idx in poly.face_indices() {
-                if poly.face_order(face_idx) != 10 {
-                    poly.color_face(face_idx, "Outer");
-                }
-            }
-            let mut inner_face = FaceIdx::new(0);
-            for decagon in poly.ngons(10) {
-                let next = poly.excavate_cupola(decagon, true);
-                inner_face = poly.excavate_antiprism(next);
-            }
-            let mut inner = Polyhedron::rhombicosidodecahedron();
-            for face_idx in inner.face_indices() {
-                if inner.face_order(face_idx) != 5 {
-                    inner.color_face(face_idx, "Inner");
-                }
-            }
-            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-            Model::new("K_5 (cupola/antiprism)", poly)
-        },
-        Model::new("K_5 (rotunda)", {
-            let mut poly = Polyhedron::great_rhombicosidodecahedron();
-            let mut inner_face = FaceIdx::new(0);
-            for decagon in poly.ngons(10) {
-                inner_face = poly.excavate_rotunda(decagon, true);
-            }
-            let inner = Polyhedron::rhombicosidodecahedron();
-            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-            poly
-        }),
-        Model::new("Stephanie", {
-            // Start with a colored truncated dodecahedron
-            let mut poly = Polyhedron::truncated_dodecahedron();
-            // Excavate using cupolae and antiprisms to form the tunnels
-            let mut inner_face = FaceIdx::new(0);
-            for decagon in poly.ngons(10) {
-                let next = poly.excavate_cupola(decagon, false);
-                inner_face = poly.excavate_antiprism(next);
-            }
-            // Excavate the central cavity, and color these edges
-            let inner = Polyhedron::dodecahedron();
-            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-            poly
-        }),
-        {
-            // Start with a colored truncated dodecahedron
-            let mut poly = Polyhedron::truncated_dodecahedron();
-            poly.color_all_edges("Outer");
-            // Excavate using cupolae and antiprisms to form the tunnels
-            let mut inner_face = FaceIdx::new(0);
-            for decagon in poly.ngons(10) {
-                let next = poly.excavate_cupola(decagon, false);
-                inner_face = poly.excavate_antiprism(next);
-            }
-            // Excavate the central cavity, and color these edges
-            let mut inner = Polyhedron::dodecahedron();
-            inner.color_all_edges("Inner");
-            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-
-            Model::new("Stephanie (Coloring A)", poly)
-        },
-        {
-            // Start with a colored truncated dodecahedron
-            let mut poly = Polyhedron::truncated_dodecahedron();
-            for tri in poly.ngons(3) {
-                poly.color_face(tri, "Outer");
-            }
-            // Excavate using cupolae and antiprisms to form the tunnels
-            let mut inner_face = FaceIdx::new(0);
-            for decagon in poly.ngons(10) {
-                let next = poly.excavate_cupola(decagon, false);
-                inner_face = poly.excavate_antiprism(next);
-            }
-            // Excavate the central cavity, and color these edges
-            let inner = Polyhedron::dodecahedron();
-            poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
-
-            Model::new("Stephanie (Coloring B)", poly)
-        },
-        {
-            let mut poly = Polyhedron::truncated_icosahedron();
-            for face in poly.ngons(5) {
-                poly.color_face(face, "Pentagons");
-            }
-
-            Model::new("Football", poly)
-        },
+        Model::new("K_3 / 3Q_3 (S_3)", k3_cupolae()),
+        Model::new("K_4 (tunnel octagons)", k4_tunnel(K4TunnelFace::Octagons)),
+        Model::new("K_4 (tunnel hexagons)", k4_tunnel(K4TunnelFace::Hexagons)),
+        Model::new("K_4 (tunnel squares)", k4_tunnel(K4TunnelFace::Squares)),
+        Model::new("K_5 (cupola/antiprism)", k5_cupola()),
+        Model::new("K_5 (rotunda)", k5_rotunda()),
+        Model::new("Stephanie", stephanie(false)),
+        Model::new("Stephanie (Coloring B)", stephanie(true)),
+        Model::new("Football", football()),
         Model::new("Cube Box (Color A)", cube_box_col_a(false)),
         Model::new("Cube Box (Color B)", cube_box_col_a(true)),
     ];
 
     toroids.to_vec()
-}
-
-fn q4_q4_slash_b4() -> Polyhedron {
-    let PrismLike {
-        mut poly,
-        bottom_face,
-        top_face,
-    } = Polyhedron::cupola(4);
-    poly.extend_cupola(bottom_face, true);
-    poly.excavate_cuboctahedron(top_face);
-    poly
 }
 
 fn flying_saucer() -> Polyhedron {
@@ -618,6 +379,207 @@ fn flying_saucer() -> Polyhedron {
         v
     });
     poly.excavate_prism(top_face);
+    poly
+}
+
+fn cake_pan(n: usize) -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face: _,
+    } = Polyhedron::cupola(n);
+    let next = poly.extend_prism(bottom_face);
+    let next = poly.excavate_cupola(next, true);
+    poly.excavate_prism(next);
+    poly
+}
+
+fn torturous_tunnel() -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::cupola(3);
+    let bottom_face = poly.extend_cupola(bottom_face, true);
+    poly.excavate_antiprism(bottom_face);
+    poly.excavate_antiprism(top_face);
+    poly
+}
+
+fn oriental_hat() -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face: _,
+    } = Polyhedron::rotunda();
+    let bottom_face = poly.excavate_cupola(bottom_face, false);
+    poly.excavate_antiprism(bottom_face);
+    poly
+}
+
+fn bob(gyrate: bool) -> Polyhedron {
+    let mut poly = Polyhedron::truncated_cube();
+    let face = poly.get_face_with_normal(Vec3::unit_x());
+    poly.color_faces_added_by("Tunnel", |poly| {
+        let next = poly.excavate_cupola(face, !gyrate);
+        let next = poly.excavate_prism(next);
+        poly.excavate_cupola(next, false);
+    });
+    poly
+}
+
+fn dumbell() -> Polyhedron {
+    let mut poly = Polyhedron::truncated_cube();
+    // Extend +x and -x faces with cupolae
+    let face = poly.get_face_with_normal(Vec3::unit_x());
+    let back_face = poly.get_face_with_normal(-Vec3::unit_x());
+    poly.extend_cupola(back_face, true);
+    let next = poly.extend_cupola(face, true);
+    // Tunnel with B_4 (P_4) B_4
+    poly.color_faces_added_by("Tunnel", |poly| {
+        let next = poly.excavate_cuboctahedron(next);
+        let next = poly.excavate_prism(next);
+        poly.excavate_cuboctahedron(next);
+    });
+    poly
+}
+
+fn qpq_slash_p(gyro: bool) -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::prism(6);
+    let face_to_excavate = poly.get_ngon(4);
+    poly.extend_cupola(bottom_face, false);
+    poly.extend_cupola(top_face, gyro);
+    let tunnel = Polyhedron::prism(6).poly;
+    poly.excavate(face_to_excavate, &tunnel, tunnel.get_ngon(4), 1);
+    poly
+}
+
+fn q4_q4_slash_b4() -> Polyhedron {
+    let PrismLike {
+        mut poly,
+        bottom_face,
+        top_face,
+    } = Polyhedron::cupola(4);
+    poly.extend_cupola(bottom_face, true);
+    poly.excavate_cuboctahedron(top_face);
+    poly
+}
+
+fn k3_cupolae() -> Polyhedron {
+    let mut poly = Polyhedron::truncated_octahedron();
+    // Excavate cupolas (TODO: Do this by symmetry)
+    let mut inner_face = FaceIdx::new(0);
+    poly.color_faces_added_by("Tunnels", |poly| {
+        for face_idx in [0, 2, 4, 6] {
+            inner_face = poly.excavate_cupola(FaceIdx::new(face_idx), true);
+        }
+    });
+    // Excavate central octahedron
+    poly.color_faces_added_by("Centre", |poly| {
+        poly.excavate_antiprism(inner_face);
+    });
+    poly
+}
+
+#[derive(Debug, Clone, Copy)]
+enum K4TunnelFace {
+    Octagons,
+    Hexagons,
+    Squares,
+}
+
+fn k4_tunnel(tunnel: K4TunnelFace) -> Polyhedron {
+    let mut poly = Polyhedron::great_rhombicuboctahedron();
+    let mut inner_face = FaceIdx::new(0);
+    let inner = Polyhedron::rhombicuboctahedron();
+    let face = match tunnel {
+        K4TunnelFace::Octagons => {
+            for octagon in poly.ngons(8) {
+                inner_face = poly.excavate_cupola(octagon, false);
+            }
+            inner.get_ngon(4)
+        }
+        K4TunnelFace::Hexagons => {
+            for hexagon in poly.ngons(6) {
+                inner_face = poly.excavate_cupola(hexagon, true);
+            }
+            inner.get_ngon(3)
+        }
+        K4TunnelFace::Squares => {
+            for square in poly.ngons(4) {
+                inner_face = poly.excavate_prism(square);
+            }
+            *inner.ngons(4).last().unwrap()
+        }
+    };
+    poly.color_faces_added_by("Inner", |poly| {
+        poly.excavate(inner_face, &inner, face, 1);
+    });
+    poly
+}
+
+fn k5_cupola() -> Polyhedron {
+    let mut poly = Polyhedron::great_rhombicosidodecahedron();
+    for face_idx in poly.face_indices() {
+        if poly.face_order(face_idx) != 10 {
+            poly.color_face(face_idx, "Outer");
+        }
+    }
+    let mut inner_face = FaceIdx::new(0);
+    for decagon in poly.ngons(10) {
+        let next = poly.excavate_cupola(decagon, true);
+        inner_face = poly.excavate_antiprism(next);
+    }
+    let mut inner = Polyhedron::rhombicosidodecahedron();
+    for face_idx in inner.face_indices() {
+        if inner.face_order(face_idx) != 5 {
+            inner.color_face(face_idx, "Inner");
+        }
+    }
+    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+    poly
+}
+
+fn k5_rotunda() -> Polyhedron {
+    let mut poly = Polyhedron::great_rhombicosidodecahedron();
+    let mut inner_face = FaceIdx::new(0);
+    for decagon in poly.ngons(10) {
+        inner_face = poly.excavate_rotunda(decagon, true);
+    }
+    let inner = Polyhedron::rhombicosidodecahedron();
+    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+    poly
+}
+
+fn stephanie(color: bool) -> Polyhedron {
+    // Start with a colored truncated dodecahedron
+    let mut poly = Polyhedron::truncated_dodecahedron();
+    if color {
+        for tri in poly.ngons(3) {
+            poly.color_face(tri, "Outer");
+        }
+    }
+    // Excavate using cupolae and antiprisms to form the tunnels
+    let mut inner_face = FaceIdx::new(0);
+    for decagon in poly.ngons(10) {
+        let next = poly.excavate_cupola(decagon, false);
+        inner_face = poly.excavate_antiprism(next);
+    }
+    // Excavate the central cavity, and color these edges
+    let inner = Polyhedron::dodecahedron();
+    poly.excavate(inner_face, &inner, inner.get_ngon(5), 0);
+    poly
+}
+
+fn football() -> Polyhedron {
+    let mut poly = Polyhedron::truncated_icosahedron();
+    for face in poly.ngons(5) {
+        poly.color_face(face, "Pentagons");
+    }
     poly
 }
 
