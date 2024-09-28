@@ -25,30 +25,64 @@ pub fn all() -> Vec<Model> {
 pub fn add_origamis(all_models: &mut Vec<Model>) {
     let models = [
         Model::new("Bi Cube", bi_cube()).with_ow_unit(OwUnit::CustomDeg90, 1, 1),
-        // Truncated tetrahedron
-        // Cuboctahedron
+        Model::new("Truncated Tetrahedron", Polyhedron::truncated_tetrahedron())
+            .with_ow_unit(OwUnit::Deg120, 1, 1)
+            .with_default_color(COLOR_THEME.mauve),
+        Model::new("Cuboctahedron", colored_cuboctahedron()).with_ow_unit(
+            OwUnit::CustomDeg90,
+            3,
+            2,
+        ),
         Model::new("Flying Saucer", flying_saucer())
             .with_ow_unit(OwUnit::CustomDeg90, 3, 2)
             .with_push(Side::Out, true)
             .with_default_color(COLOR_THEME.green),
-        // Snub cube
-        Model::new("Terribly Torturous Tunnel", aplanar_deltahedron()).with_ow_unit(
-            OwUnit::Deg60,
+        Model::new("Snub Cube", colored_snub_cube()).with_ow_unit(OwUnit::CustomDeg90, 3, 2),
+        Model::new("Terribly Torturous Tunnel", aplanar_deltahedron())
+            .with_ow_unit(OwUnit::Deg60, 3, 2)
+            .with_default_color(COLOR_THEME.pink),
+        Model::new("Octahedral Rings", Polyhedron::octahedron()).with_ow_unit(
+            OwUnit::SturdyEdgeModule90,
+            1,
+            1,
+        ),
+        Model::new("Cuboctahedral Rings", Polyhedron::cuboctahedron()).with_ow_unit(
+            OwUnit::Deg120,
+            1,
+            1,
+        ),
+        Model::new("Icosidodecahedral Rings", Polyhedron::icosidodecahedron()).with_ow_unit(
+            OwUnit::Deg135,
+            1,
+            1,
+        ),
+        Model::new("Dodecahedron (108° Unit Test)", Polyhedron::dodecahedron()).with_ow_unit(
+            OwUnit::CustomDeg108,
+            1,
+            1,
+        ),
+        Model::new("Triangular Prism (Test)", Polyhedron::prism(3).poly).with_ow_unit(
+            OwUnit::Custom3468,
             3,
             2,
         ),
-        // Cuboctahedral rings
-        // Icosidodecahedral rings
-        // Octahedral rings
-        // Dodecahedron
-        // Tri prism
-        // Hex prism
-        // Oct prism
+        Model::new("Hexagonal Prism (Test)", Polyhedron::prism(6).poly).with_ow_unit(
+            OwUnit::Custom3468,
+            3,
+            2,
+        ),
+        Model::new("Octagonal Prism (Test)", Polyhedron::prism(8).poly).with_ow_unit(
+            OwUnit::Custom3468,
+            2,
+            2,
+        ),
         Model::new("Christopher", christopher()).with_ow_unit(OwUnit::CustomDeg90, 3, 2),
         Model::new("Amethyst", q4_q4_slash_b4())
             .with_ow_unit(OwUnit::Custom3468, 3, 2)
             .with_default_color(COLOR_THEME.mauve),
-        // Torturous tunnel
+        Model::new("Torturous Tunnel", torturous_tunnel())
+            .with_ow_unit(OwUnit::Custom3468, 3, 2)
+            .with_default_color(COLOR_THEME.sapphire),
         Model::new("Chamfered RGB Cube", colored_great_rhombicuboctahedron())
             .with_ow_unit(OwUnit::Ow68, 1, 1)
             .with_default_color(crate::COLOR_THEME.surface0),
@@ -181,6 +215,25 @@ fn toroids() -> Vec<Model> {
 /////////////////////////////
 // MODEL CONSTRUCTION CODE //
 /////////////////////////////
+
+fn colored_cuboctahedron() -> Polyhedron {
+    let mut poly = Polyhedron::cuboctahedron();
+    for tri in poly.ngons(3) {
+        let c = poly.face_centroid(tri);
+        if c.x * c.y * c.z > 0.0 {
+            poly.color_all_edges_of_face(tri, "Blue");
+        }
+    }
+    poly
+}
+
+fn colored_snub_cube() -> Polyhedron {
+    let mut poly = Polyhedron::snub_cube();
+    for square in poly.ngons(4) {
+        poly.color_all_edges_of_face(square, "Square");
+    }
+    poly
+}
 
 fn colored_great_rhombicuboctahedron() -> Polyhedron {
     let mut poly = Polyhedron::great_rhombicuboctahedron();
